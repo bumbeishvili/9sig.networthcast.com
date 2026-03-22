@@ -571,11 +571,16 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
         cash += diff;
         action = 'SELL ' + fmt(diff);
       } else if (diff < 0 && cash > 0) {
-        const needed = Math.min(-diff, cash);
-        const sharesToBuy = needed / qPrice;
-        tqqqShares += sharesToBuy;
-        cash -= needed;
-        action = needed < -diff ? 'BUY ' + fmt(needed) + ' (part)' : 'BUY ' + fmt(needed);
+        const available = cash * 0.9; // keep 10% cash reserve
+        const needed = Math.min(-diff, available);
+        if (needed > 0) {
+          const sharesToBuy = needed / qPrice;
+          tqqqShares += sharesToBuy;
+          cash -= needed;
+          action = needed < -diff ? 'BUY ' + fmt(needed) + ' (part)' : 'BUY ' + fmt(needed);
+        } else {
+          action = 'HOLD';
+        }
       } else {
         action = 'HOLD';
       }
