@@ -662,6 +662,8 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
       }
 
       const tqqqVal = tqqqShares * qPrice;
+      // Reset signal line to actual TQQQ value after rebalancing if we couldn't close the gap
+      if (tqqqVal < signalLine) signalLine = tqqqVal;
       log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, invested: totalInvested, target: signalLine });
     } else {
       // First quarter — just record starting state
@@ -999,7 +1001,19 @@ function render() {
       interaction: { mode: 'index', intersect: false },
       layout: { padding: { right: 120 } },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: '#94a3b8',
+            font: { family: 'DM Sans', size: 11 },
+            usePointStyle: true,
+            pointStyle: 'circle',
+            padding: 16,
+            boxWidth: 8,
+            boxHeight: 8
+          }
+        },
         tooltip: {
           enabled: false,
           external: externalTooltip
