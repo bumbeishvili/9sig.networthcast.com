@@ -1,7 +1,16 @@
 {
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
-      "Bash(awk 'NR>=978 && NR<=980' /Users/datobumbeishvili/Desktop/git/9sig.networthcast.com/index.html)"
+      "Edit",
+      "Write",
+      "Read",
+      "Bash(*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

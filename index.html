@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>9sig Strategy Simulator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230a0e17'/><polyline points='4,24 10,18 16,20 22,10 28,6' fill='none' stroke='%2338bdf8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/><circle cx='28' cy='6' r='2' fill='%2338bdf8'/></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -35,6 +36,7 @@
   .header {
     text-align: center;
     margin-bottom: 32px;
+    position: relative;
   }
 
   .header h1 {
@@ -336,17 +338,19 @@
   }
 
   #share-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 12px;
-    padding: 8px 18px;
+    gap: 5px;
+    padding: 6px 14px;
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 8px;
-    color: var(--text);
+    color: var(--text-muted);
     font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -359,17 +363,18 @@
   }
 
   #share-toast {
-    display: none;
-    margin-top: 8px;
+    position: absolute;
+    top: 0;
+    right: 120px;
     padding: 6px 14px;
     background: var(--green);
     color: var(--bg);
     font-size: 12px;
     font-weight: 600;
     border-radius: 6px;
-    display: inline-block;
     opacity: 0;
     transition: opacity 0.3s;
+    white-space: nowrap;
   }
 
   #share-toast.show {
@@ -384,7 +389,7 @@
   <p>Quarterly rebalancing on synthetic TQQQ (3x QQQ) &middot; 1999&ndash;2026</p>
   <button id="share-btn" onclick="shareConfig()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-    Share
+    Share Current Configuration
   </button>
   <div id="share-toast">Link copied to clipboard</div>
 </div>
@@ -468,29 +473,61 @@
 </div>
 
 <script>
-// Load QQQ daily data from CSV
-async function loadQQQDaily() {
-  const resp = await fetch('qqq_daily.csv');
-  const text = await resp.text();
-  const lines = text.trim().split('\n');
-  // skip header
-  return lines.slice(1).map(line => {
-    const [date, close] = line.split(',');
-    return [date, parseFloat(close)];
+// Parse "M/D/YYYY HH:MM:SS" -> "YYYY-MM-DD", auto-detect delimiter (tab or comma)
+function parseDataFile(text) {
+  const lines = text.trim().split(/\r?\n/).slice(1);
+  const sep = lines[0].includes('\t') ? '\t' : ',';
+  return lines.map(line => {
+    const [dateStr, close] = line.split(sep);
+    const parts = dateStr.split(' ')[0].split('/');
+    const m = parts[0].padStart(2, '0');
+    const d = parts[1].padStart(2, '0');
+    const y = parts[2];
+    return [y + '-' + m + '-' + d, parseFloat(close)];
   });
 }
 
-// === Synthesize TQQQ from daily QQQ returns ===
-const EXPENSE_DAILY = 0.0088 / 252; // 0.88% annual / 252 trading days
-const TQQQ_START = 10; // arbitrary starting price
+async function loadQQQDaily() {
+  const resp = await fetch('simulation_tqqq_qqq - qqq.tsv');
+  return parseDataFile(await resp.text());
+}
 
-function buildTQQQ(dailyQQQ) {
-  const result = [{ date: dailyQQQ[0][0], qqq: dailyQQQ[0][1], tqqq: TQQQ_START }];
-  for (let i = 1; i < dailyQQQ.length; i++) {
-    const qqqReturn = (dailyQQQ[i][1] - dailyQQQ[i - 1][1]) / dailyQQQ[i - 1][1];
-    const prevTqqq = result[i - 1].tqqq;
-    const newTqqq = prevTqqq * (1 + 3 * qqqReturn - EXPENSE_DAILY);
-    result.push({ date: dailyQQQ[i][0], qqq: dailyQQQ[i][1], tqqq: Math.max(newTqqq, 0) });
+async function loadTQQQDaily() {
+  const resp = await fetch('simulation_tqqq_qqq - tqqq.tsv');
+  return parseDataFile(await resp.text());
+}
+
+// Build daily array: synthesize TQQQ before real data, use real data after
+const EXPENSE_DAILY = 0.0088 / 252;
+
+function buildDaily(qqqDaily, tqqqDaily) {
+  const tqqqMap = new Map(tqqqDaily.map(d => [d[0], d[1]]));
+  const realStartDate = tqqqDaily[0][0];
+
+  // Find where real TQQQ data begins in QQQ timeline
+  const junctionIdx = qqqDaily.findIndex(d => d[0] >= realStartDate);
+  const realStartPrice = tqqqDaily[0][1];
+
+  // Synthesize pre-2010: work backwards from the real TQQQ start price
+  const preQQQ = qqqDaily.slice(0, junctionIdx);
+  const synthPrices = new Array(preQQQ.length);
+  synthPrices[preQQQ.length - 1] = realStartPrice;
+  for (let i = preQQQ.length - 1; i > 0; i--) {
+    const qqqReturn = (preQQQ[i][1] - preQQQ[i - 1][1]) / preQQQ[i - 1][1];
+    synthPrices[i - 1] = Math.max(synthPrices[i] / (1 + 3 * qqqReturn - EXPENSE_DAILY), 0);
+  }
+
+  const result = [];
+  // Pre-2010: synthesized TQQQ
+  for (let i = 0; i < preQQQ.length; i++) {
+    result.push({ date: preQQQ[i][0], qqq: preQQQ[i][1], tqqq: synthPrices[i] });
+  }
+  // 2010+: real TQQQ prices matched with QQQ
+  for (let i = junctionIdx; i < qqqDaily.length; i++) {
+    const tqqqPrice = tqqqMap.get(qqqDaily[i][0]);
+    if (tqqqPrice != null) {
+      result.push({ date: qqqDaily[i][0], qqq: qqqDaily[i][1], tqqq: tqqqPrice });
+    }
   }
   return result;
 }
@@ -570,14 +607,25 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
       const currentTqqqValue = tqqqShares * qPrice;
       targetTqqqValue *= (1 + qTarget);
 
+      // Check if TQQQ is below 30% of its 2-year high (no-sell zone)
+      const twoYearsAgo = qDate.substring(0, 4) - 2 + qDate.substring(4);
+      let peak2y = qPrice;
+      for (let k = qi; k >= 0; k--) {
+        if (qSlice[k][0] < twoYearsAgo) break;
+        if (qSlice[k][1] > peak2y) peak2y = qSlice[k][1];
+      }
+      const inCrashZone = qPrice < peak2y * 0.3;
+
       const diff = currentTqqqValue - targetTqqqValue;
       let action = '';
 
-      if (diff > 0) {
+      if (diff > 0 && !inCrashZone) {
         const sharesToSell = diff / qPrice;
         tqqqShares -= sharesToSell;
         cash += diff;
         action = 'SELL ' + fmt(diff);
+      } else if (diff > 0 && inCrashZone) {
+        action = 'HOLD (crash)';
       } else if (diff < 0 && cash > 0) {
         const available = cash * 0.9; // keep 10% cash reserve
         const needed = Math.min(-diff, available);
@@ -644,6 +692,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
 let chart = null;
 
 function render() {
+  if (!quarterlyData) return; // data not loaded yet
   const initial = +document.getElementById('slider-initial').value;
   const monthly = +document.getElementById('slider-monthly').value;
   const rate = +document.getElementById('slider-rate').value / 100;
@@ -667,7 +716,7 @@ function render() {
 
   if (log.length < 1) {
     document.getElementById('stats-grid').innerHTML = '<div class="stat-card" style="grid-column:span 2"><div class="stat-label">Select a wider period</div></div>';
-    if (chart) chart.destroy();
+    if (chart) { chart.destroy(); chart = null; }
     document.getElementById('log-body').innerHTML = '';
     return;
   }
@@ -675,10 +724,11 @@ function render() {
   const finalLog = log[log.length - 1];
   const finalBH = bhPoints[bhPoints.length - 1].value;
   const finalQQQ = qqqPoints[qqqPoints.length - 1].value;
-  const ret9 = ((finalLog.total - totalContributed) / totalContributed * 100);
-  const retBH = ((finalBH - totalContributed) / totalContributed * 100);
-  const retQQQ = ((finalQQQ - totalContributed) / totalContributed * 100);
   const years = log.length > 1 ? (new Date(log[log.length-1].date) - new Date(log[0].date)) / (365.25*86400000) : 1;
+  const cagr = (end, start) => years > 0 ? (Math.pow(end / start, 1 / years) - 1) * 100 : 0;
+  const ret9 = cagr(finalLog.total, totalContributed);
+  const retBH = cagr(finalBH, totalContributed);
+  const retQQQ = cagr(finalQQQ, totalContributed);
 
   document.getElementById('stats-grid').innerHTML = `
     <div class="stat-card">
@@ -686,7 +736,7 @@ function render() {
       <div class="stat-value neutral">${fmtFull(finalLog.total)}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">9sig Return</div>
+      <div class="stat-label">9sig Annualized</div>
       <div class="stat-value ${ret9 >= 0 ? 'positive' : 'negative'}">${ret9 >= 0 ? '+' : ''}${ret9.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
@@ -694,7 +744,7 @@ function render() {
       <div class="stat-value" style="color:var(--accent2)">${fmtFull(finalBH)}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">B&H TQQQ Return</div>
+      <div class="stat-label">B&H TQQQ Annualized</div>
       <div class="stat-value ${retBH >= 0 ? 'positive' : 'negative'}">${retBH >= 0 ? '+' : ''}${retBH.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
@@ -702,7 +752,7 @@ function render() {
       <div class="stat-value" style="color:#4ade80">${fmtFull(finalQQQ)}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">B&H QQQ Return</div>
+      <div class="stat-label">B&H QQQ Annualized</div>
       <div class="stat-value ${retQQQ >= 0 ? 'positive' : 'negative'}">${retQQQ >= 0 ? '+' : ''}${retQQQ.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
@@ -724,7 +774,16 @@ function render() {
   const invD = log.map(l => l.invested);
   const targetD = log.map(l => l.target);
 
-  if (chart) chart.destroy();
+  if (chart) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = totalD;
+    chart.data.datasets[1].data = bhD;
+    chart.data.datasets[2].data = qqqD;
+    chart.data.datasets[3].data = targetD;
+    chart.data.datasets[4].data = cashD;
+    chart.data.datasets[5].data = invD;
+    chart.update('none');
+  } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
   const lineColors = ['#22d3ee', '#a78bfa', '#4ade80', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
@@ -738,8 +797,9 @@ function render() {
     const idx = tooltip.dataPoints?.[0]?.dataIndex;
     if (idx == null) return;
 
-    const date = labels[idx];
-    const vals = [totalD[idx], bhD[idx], qqqD[idx], targetD[idx], cashD[idx], invD[idx]];
+    const ds = c.data.datasets;
+    const date = c.data.labels[idx];
+    const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx]];
 
     el.innerHTML = `
       <div class="tt-date">${qLabel(date)}</div>
@@ -948,6 +1008,7 @@ function render() {
       }
     }
   });
+  } // end else (first render)
 
   // Table
   document.getElementById('log-body').innerHTML = log.map((l, i) => {
@@ -1008,8 +1069,14 @@ function shareConfig() {
 
 // Initialize: load CSV, derive data, set slider max, restore state, render
 (async function init() {
-  const QQQ_DAILY = await loadQQQDaily();
-  daily = buildTQQQ(QQQ_DAILY);
+  let QQQ_DAILY, TQQQ_DAILY;
+  try {
+    [QQQ_DAILY, TQQQ_DAILY] = await Promise.all([loadQQQDaily(), loadTQQQDaily()]);
+  } catch(e) {
+    console.error('Failed to load CSV data:', e);
+    return;
+  }
+  daily = buildDaily(QQQ_DAILY, TQQQ_DAILY);
   quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq]);
   monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq]);
   const maxQIdx = quarterlyData.length - 1;
