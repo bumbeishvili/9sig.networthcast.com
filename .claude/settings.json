@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR>=978 && NR<=980' /Users/datobumbeishvili/Desktop/git/9sig.networthcast.com/index.html)"
+    ]
+  }
+}
