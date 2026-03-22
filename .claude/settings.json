@@ -5,7 +5,8 @@
       "Edit",
       "Write",
       "Read",
-      "Bash(*)"
+      "Bash(*)",
+      "WebFetch(*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",

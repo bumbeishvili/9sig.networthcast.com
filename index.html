@@ -416,7 +416,7 @@
     <div class="control-group">
       <label>Initial Investment</label>
       <div class="value-display" id="disp-initial">$10,000</div>
-      <input type="range" id="slider-initial" min="1000" max="1000000" step="1000" value="10000">
+      <input type="range" id="slider-initial" min="0" max="1000000" step="1000" value="10000">
     </div>
 
     <div class="control-group">
@@ -436,7 +436,14 @@
     <div class="stats-grid" id="stats-grid"></div>
 
     <div class="info-note">
-      <strong>9sig:</strong> Target 9% quarterly growth on TQQQ. Rebalance each quarter — skim excess to cash or buy from cash. Monthly contributions go to cash reserve earning interest.
+      <strong>9sig Rules:</strong><br>
+      &bull; Initial allocation: 70% TQQQ / 30% cash<br>
+      &bull; Signal line grows 9% per quarter<br>
+      &bull; Above signal &rarr; sell excess to cash<br>
+      &bull; Below signal &rarr; buy from cash to reach signal<br>
+      &bull; Monthly contributions go 100% to cash; signal line rises by 50% of new cash<br>
+      &bull; 90% buying power throttle &mdash; buy signals use at most 90% of cash<br>
+      &bull; 30-down no-sell &mdash; skip sell if TQQQ is 30%+ below its 2-year high
     </div>
   </div>
 
@@ -575,18 +582,15 @@ function fmtFull(n) {
 
 function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
   const monthlyRate = annualRate / 12;
-  const qTarget = 0.09;
+  const qGrowth = 0.09; // 9% quarterly signal line growth
 
   const qSlice = quarterlyData.slice(entryIdx, exitIdx + 1);
-  if (qSlice.length < 2) return { log: [], bhPoints: [], totalContributed: initial };
+  if (qSlice.length < 2) return { log: [], bhPoints: [], qqqPoints: [], totalContributed: initial };
 
-  // Monthly dates in range
-  const startDate = qSlice[0][0];
-  const endDate = qSlice[qSlice.length - 1][0];
-
-  let cash = initial / 2;
-  let tqqqShares = (initial / 2) / qSlice[0][1];
-  let targetTqqqValue = initial / 2;
+  // Initial 70/30 allocation: 70% TQQQ, 30% cash/bond
+  let cash = initial * 0.3;
+  let tqqqShares = (initial * 0.7) / qSlice[0][1];
+  let signalLine = initial * 0.7; // target TQQQ value starts at initial TQQQ allocation
   let totalInvested = initial;
 
   const log = [];
@@ -596,38 +600,46 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
     const [qDate, qPrice] = qSlice[qi];
 
     if (qi > 0) {
+      // Add monthly contributions: 100% goes to cash, signal line rises by 50% of new cash
+      let newCashThisQ = 0;
       for (const [mDate] of monthlyData) {
         if (mDate > prevQDate && mDate <= qDate) {
           cash += monthly;
           totalInvested += monthly;
+          newCashThisQ += monthly;
+          // Apply monthly interest on cash
           cash *= (1 + monthlyRate);
         }
       }
 
-      const currentTqqqValue = tqqqShares * qPrice;
-      targetTqqqValue *= (1 + qTarget);
+      // Signal line grows 9% per quarter + 50% of new cash contributions
+      signalLine = signalLine * (1 + qGrowth) + newCashThisQ * 0.5;
 
-      // Check if TQQQ is below 30% of its 2-year high (no-sell zone)
-      const twoYearsAgo = qDate.substring(0, 4) - 2 + qDate.substring(4);
+      const currentTqqqValue = tqqqShares * qPrice;
+      const diff = currentTqqqValue - signalLine;
+      let action = '';
+
+      // 30-down no-sell rule: if TQQQ price < 70% of 2-year high, don't sell
+      const twoYearsAgo = (parseInt(qDate.substring(0, 4)) - 2) + qDate.substring(4);
       let peak2y = qPrice;
       for (let k = qi; k >= 0; k--) {
         if (qSlice[k][0] < twoYearsAgo) break;
         if (qSlice[k][1] > peak2y) peak2y = qSlice[k][1];
       }
-      const inCrashZone = qPrice < peak2y * 0.3;
-
-      const diff = currentTqqqValue - targetTqqqValue;
-      let action = '';
+      const inCrashZone = qPrice < peak2y * 0.7;
 
       if (diff > 0 && !inCrashZone) {
+        // SELL: TQQQ above signal, sell excess to cash
         const sharesToSell = diff / qPrice;
         tqqqShares -= sharesToSell;
         cash += diff;
         action = 'SELL ' + fmt(diff);
       } else if (diff > 0 && inCrashZone) {
-        action = 'HOLD (crash)';
+        // Signal says sell but we're in crash zone — hold
+        action = 'HOLD (30d)';
       } else if (diff < 0 && cash > 0) {
-        const available = cash * 0.9; // keep 10% cash reserve
+        // BUY: TQQQ below signal, buy from cash (90% throttle)
+        const available = cash * 0.9;
         const needed = Math.min(-diff, available);
         if (needed > 0) {
           const sharesToBuy = needed / qPrice;
@@ -642,10 +654,11 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
       }
 
       const tqqqVal = tqqqShares * qPrice;
-      log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, invested: totalInvested, target: targetTqqqValue });
+      log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, invested: totalInvested, target: signalLine });
     } else {
+      // First quarter — just record starting state
       const tqqqVal = tqqqShares * qSlice[0][1];
-      log.push({ date: qDate, price: qSlice[0][1], tqqqVal, cash, total: tqqqVal + cash, action: 'START', invested: totalInvested, target: targetTqqqValue });
+      log.push({ date: qDate, price: qSlice[0][1], tqqqVal, cash, total: tqqqVal + cash, action: 'START', invested: totalInvested, target: signalLine });
     }
     prevQDate = qDate;
   }
@@ -725,7 +738,7 @@ function render() {
   const finalBH = bhPoints[bhPoints.length - 1].value;
   const finalQQQ = qqqPoints[qqqPoints.length - 1].value;
   const years = log.length > 1 ? (new Date(log[log.length-1].date) - new Date(log[0].date)) / (365.25*86400000) : 1;
-  const cagr = (end, start) => years > 0 ? (Math.pow(end / start, 1 / years) - 1) * 100 : 0;
+  const cagr = (end, start) => years > 0 && start > 0 ? (Math.pow(end / start, 1 / years) - 1) * 100 : 0;
   const ret9 = cagr(finalLog.total, totalContributed);
   const retBH = cagr(finalBH, totalContributed);
   const retQQQ = cagr(finalQQQ, totalContributed);
