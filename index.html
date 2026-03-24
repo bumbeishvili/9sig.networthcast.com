@@ -600,6 +600,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
   let tqqqShares = (initial * 0.7) / qSlice[0][1];
   let signalLine = initial * 0.7; // target TQQQ value starts at initial TQQQ allocation
   let totalInvested = initial;
+  let investedCompounded = initial;
 
   const log = [];
   let prevQDate = qSlice[0][0];
@@ -617,6 +618,9 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
           newCashThisQ += monthly;
           // Apply monthly interest on cash
           cash *= (1 + monthlyRate);
+          // Compound invested baseline
+          investedCompounded *= (1 + monthlyRate);
+          investedCompounded += monthly;
         }
       }
 
@@ -664,11 +668,11 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
       const tqqqVal = tqqqShares * qPrice;
       // Reset signal line to actual TQQQ value after rebalancing if we couldn't close the gap
       if (tqqqVal < signalLine) signalLine = tqqqVal;
-      log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, invested: totalInvested, target: signalLine });
+      log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, invested: totalInvested, investedCompounded, target: signalLine });
     } else {
       // First quarter — just record starting state
       const tqqqVal = tqqqShares * qSlice[0][1];
-      log.push({ date: qDate, price: qSlice[0][1], tqqqVal, cash, total: tqqqVal + cash, action: 'START', invested: totalInvested, target: signalLine });
+      log.push({ date: qDate, price: qSlice[0][1], tqqqVal, cash, total: tqqqVal + cash, action: 'START', invested: totalInvested, investedCompounded, target: signalLine });
     }
     prevQDate = qDate;
   }
@@ -779,8 +783,8 @@ function render() {
       <div class="stat-value ${retQQQ >= 0 ? 'positive' : 'negative'}">${retQQQ >= 0 ? '+' : ''}${retQQQ.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Total Invested</div>
-      <div class="stat-value" style="color:var(--text)">${fmtFull(totalContributed)}</div>
+      <div class="stat-label">Invested Compounded</div>
+      <div class="stat-value" style="color:var(--text)">${fmtFull(finalLog.investedCompounded)}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Cash Reserve</div>
@@ -791,26 +795,28 @@ function render() {
   // Chart
   const labels = log.map(l => l.date);
   const totalD = log.map(l => l.total);
+  const tqqqValD = log.map(l => l.tqqqVal);
   const cashD = log.map(l => l.cash);
   const bhD = bhPoints.map(b => b.value);
   const qqqD = qqqPoints.map(q => q.value);
-  const invD = log.map(l => l.invested);
+  const invD = log.map(l => l.investedCompounded);
   const targetD = log.map(l => l.target);
 
   if (chart) {
     chart.data.labels = labels;
     chart.data.datasets[0].data = totalD;
-    chart.data.datasets[1].data = bhD;
-    chart.data.datasets[2].data = qqqD;
-    chart.data.datasets[3].data = targetD;
-    chart.data.datasets[4].data = cashD;
-    chart.data.datasets[5].data = invD;
+    chart.data.datasets[1].data = tqqqValD;
+    chart.data.datasets[2].data = bhD;
+    chart.data.datasets[3].data = qqqD;
+    chart.data.datasets[4].data = targetD;
+    chart.data.datasets[5].data = cashD;
+    chart.data.datasets[6].data = invD;
     chart.update('none');
   } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
-  const lineColors = ['#22d3ee', '#a78bfa', '#4ade80', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
-  const lineNames = ['9sig Total', 'B&H TQQQ', 'B&H QQQ', 'TQQQ Target', 'Cash', 'Invested'];
+  const lineColors = ['#22d3ee', '#38bdf8', '#a78bfa', '#4ade80', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
+  const lineNames = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', '9sig TQQQ Target', '9sig Cash', 'Invested Compounded'];
 
   const externalTooltip = (context) => {
     const { chart: c, tooltip } = context;
@@ -822,7 +828,7 @@ function render() {
 
     const ds = c.data.datasets;
     const date = c.data.labels[idx];
-    const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx]];
+    const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx], ds[6].data[idx]];
 
     el.innerHTML = `
       <div class="tt-date">${qLabel(date)}</div>
@@ -859,6 +865,7 @@ function render() {
 
       const items = c.data.datasets.map((ds, i) => {
         const meta = c.getDatasetMeta(i);
+        if (meta.hidden || ds.hidden) return null;
         const pt = meta.data[lastIdx];
         if (!pt) return null;
         return { y: pt.y, i, color: lineColors[i], name: lineNames[i], val: ds.data[lastIdx] };
@@ -935,6 +942,19 @@ function render() {
           borderWidth: 2.5
         },
         {
+          label: '9sig TQQQ Holding',
+          data: tqqqValD,
+          borderColor: '#38bdf8',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          pointHitRadius: 10,
+          borderWidth: 1.5,
+          borderDash: [2, 2],
+          hidden: true
+        },
+        {
           label: 'Buy & Hold',
           data: bhD,
           borderColor: '#a78bfa',
@@ -959,7 +979,7 @@ function render() {
           borderDash: [8, 4]
         },
         {
-          label: 'TQQQ Target',
+          label: '9sig TQQQ Target',
           data: targetD,
           borderColor: '#fb923c',
           backgroundColor: 'transparent',
@@ -968,10 +988,11 @@ function render() {
           pointRadius: 0,
           pointHitRadius: 10,
           borderWidth: 1.5,
-          borderDash: [4, 4]
+          borderDash: [4, 4],
+          hidden: true
         },
         {
-          label: 'Cash',
+          label: '9sig Cash',
           data: cashD,
           borderColor: '#fbbf24',
           backgroundColor: 'rgba(251,191,36,0.05)',
@@ -979,10 +1000,11 @@ function render() {
           tension: 0.3,
           pointRadius: 0,
           pointHitRadius: 10,
-          borderWidth: 1.5
+          borderWidth: 1.5,
+          hidden: true
         },
         {
-          label: 'Invested',
+          label: 'Invested Compounded',
           data: invD,
           borderColor: 'rgba(226,232,240,0.25)',
           backgroundColor: 'transparent',
