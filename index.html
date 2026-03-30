@@ -141,6 +141,46 @@
     border: none;
   }
 
+  .dual-range {
+    position: relative;
+    height: 32px;
+    user-select: none;
+    touch-action: none;
+  }
+  .dual-range .track {
+    position: absolute;
+    top: 13px;
+    left: 0;
+    right: 0;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--surface2);
+  }
+  .dual-range .fill {
+    position: absolute;
+    top: 13px;
+    height: 5px;
+    background: var(--accent2);
+    border-radius: 3px;
+    cursor: grab;
+  }
+  .dual-range .fill:active { cursor: grabbing; }
+  .dual-range .thumb {
+    position: absolute;
+    top: 7px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent2);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
+    transform: translateX(-50%);
+    z-index: 2;
+  }
+  .dual-range .thumb:hover {
+    box-shadow: 0 0 14px rgba(167, 139, 250, 0.6);
+  }
+
   .period-slider input[type="range"]::-webkit-slider-thumb {
     background: var(--accent2);
     box-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
@@ -406,16 +446,19 @@
   <div class="panel">
     <h2>Period</h2>
 
-    <div class="control-group period-slider">
-      <label>Entry Quarter</label>
-      <div class="value-display period" id="disp-entry">Q1 1999</div>
-      <input type="range" id="slider-entry" min="0" max="108" step="1" value="0">
-    </div>
-
-    <div class="control-group period-slider">
-      <label>Exit Quarter</label>
-      <div class="value-display period" id="disp-exit">Q1 2026</div>
-      <input type="range" id="slider-exit" min="0" max="108" step="1" value="108">
+    <div class="control-group">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div><label>Entry Quarter</label><div class="value-display period" id="disp-entry">Q1 1999</div></div>
+        <div style="text-align:right"><label>Exit Quarter</label><div class="value-display period" id="disp-exit">Q1 2026</div></div>
+      </div>
+      <div class="dual-range" id="period-range">
+        <div class="track"></div>
+        <div class="fill"></div>
+        <div class="thumb" data-handle="entry"></div>
+        <div class="thumb" data-handle="exit"></div>
+      </div>
+      <input type="hidden" id="slider-entry" value="0">
+      <input type="hidden" id="slider-exit" value="108">
     </div>
 
     <div class="divider"></div>
@@ -1110,9 +1153,136 @@ function saveSliders() {
   try { localStorage.setItem(LS_KEY, JSON.stringify(vals)); } catch(e) {}
 }
 
-SLIDER_IDS.forEach(id => {
+// Regular sliders (not entry/exit — those are handled by dual-range)
+['slider-initial','slider-monthly','slider-rate'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => { saveSliders(); render(); });
 });
+
+// Dual-range slider for period
+(function initDualRange() {
+  const container = document.getElementById('period-range');
+  const fill = container.querySelector('.fill');
+  const thumbs = container.querySelectorAll('.thumb');
+  const entryThumb = thumbs[0];
+  const exitThumb = thumbs[1];
+  const entryInput = document.getElementById('slider-entry');
+  const exitInput = document.getElementById('slider-exit');
+  let maxVal = 108; // updated in init()
+
+  function getMax() { return maxVal; }
+  function setMax(v) { maxVal = v; updateUI(); }
+
+  function valToPercent(v) { return (v / getMax()) * 100; }
+  function percentToVal(p) { return Math.round(Math.min(Math.max(p, 0), 100) / 100 * getMax()); }
+
+  function updateUI() {
+    const e = +entryInput.value, x = +exitInput.value;
+    const ep = valToPercent(e), xp = valToPercent(x);
+    entryThumb.style.left = ep + '%';
+    exitThumb.style.left = xp + '%';
+    fill.style.left = ep + '%';
+    fill.style.width = (xp - ep) + '%';
+  }
+
+  function onChanged() {
+    saveSliders();
+    render();
+  }
+
+  // Thumb dragging
+  function startThumbDrag(thumb, isEntry) {
+    return function(e) {
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      function onMove(ev) {
+        const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        const pct = ((clientX - rect.left) / rect.width) * 100;
+        let val = percentToVal(pct);
+        if (isEntry) {
+          val = Math.min(val, +exitInput.value - 1);
+          val = Math.max(val, 0);
+          entryInput.value = val;
+        } else {
+          val = Math.max(val, +entryInput.value + 1);
+          val = Math.min(val, getMax());
+          exitInput.value = val;
+        }
+        updateUI();
+        onChanged();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onUp);
+    };
+  }
+
+  entryThumb.addEventListener('mousedown', startThumbDrag(entryThumb, true));
+  entryThumb.addEventListener('touchstart', startThumbDrag(entryThumb, true), { passive: false });
+  exitThumb.addEventListener('mousedown', startThumbDrag(exitThumb, false));
+  exitThumb.addEventListener('touchstart', startThumbDrag(exitThumb, false), { passive: false });
+
+  // Fill bar dragging (moves both thumbs together)
+  fill.addEventListener('mousedown', startFillDrag);
+  fill.addEventListener('touchstart', startFillDrag, { passive: false });
+
+  function startFillDrag(e) {
+    e.preventDefault();
+    const rect = container.getBoundingClientRect();
+    const startX = e.touches ? e.touches[0].clientX : e.clientX;
+    const startEntry = +entryInput.value;
+    const startExit = +exitInput.value;
+    const span = startExit - startEntry;
+
+    function onMove(ev) {
+      const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      const dx = clientX - startX;
+      const dVal = Math.round((dx / rect.width) * getMax());
+      let newEntry = startEntry + dVal;
+      let newExit = startExit + dVal;
+      if (newEntry < 0) { newEntry = 0; newExit = span; }
+      if (newExit > getMax()) { newExit = getMax(); newEntry = getMax() - span; }
+      entryInput.value = newEntry;
+      exitInput.value = newExit;
+      updateUI();
+      onChanged();
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+  }
+
+  // Click on track to jump nearest thumb
+  container.querySelector('.track').addEventListener('click', function(e) {
+    const rect = container.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    const val = percentToVal(pct);
+    const entry = +entryInput.value, exit = +exitInput.value;
+    if (Math.abs(val - entry) < Math.abs(val - exit)) {
+      entryInput.value = Math.min(val, exit - 1);
+    } else {
+      exitInput.value = Math.max(val, entry + 1);
+    }
+    updateUI();
+    onChanged();
+  });
+
+  // Expose for init()
+  window._dualRange = { updateUI, setMax };
+})();
 
 // Share: encode current sliders into URL params
 function shareConfig() {
@@ -1150,9 +1320,8 @@ function shareConfig() {
   quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq]);
   monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq]);
   const maxQIdx = quarterlyData.length - 1;
-  document.getElementById('slider-entry').max = maxQIdx;
-  document.getElementById('slider-exit').max = maxQIdx;
   document.getElementById('slider-exit').value = maxQIdx;
+  window._dualRange.setMax(maxQIdx);
   // Restore saved state: URL params > localStorage > defaults
   const params = new URLSearchParams(window.location.search);
   const urlMap = { i: 'slider-initial', m: 'slider-monthly', r: 'slider-rate', e: 'slider-entry', x: 'slider-exit' };
@@ -1167,6 +1336,7 @@ function shareConfig() {
       if (saved) SLIDER_IDS.forEach(id => { if (saved[id] != null) document.getElementById(id).value = saved[id]; });
     } catch(e) {}
   }
+  window._dualRange.updateUI();
   render();
 })();
 </script>
