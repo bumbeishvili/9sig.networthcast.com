@@ -451,7 +451,7 @@
       &bull; Below signal &rarr; buy from cash to reach signal<br>
       &bull; Monthly contributions go 100% to cash; signal line rises by 50% of new cash<br>
       &bull; 90% buying power throttle &mdash; buy signals use at most 90% of cash<br>
-      &bull; 30-down no-sell &mdash; skip sell if TQQQ is 30%+ below its 2-year high
+      &bull; 30-down no-sell &mdash; skip sell up to 2 consecutive quarters if TQQQ is 30%+ below its 2-year high
     </div>
   </div>
 
@@ -604,6 +604,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
 
   const log = [];
   let prevQDate = qSlice[0][0];
+  let crashNoSellCount = 0; // track consecutive 30-down no-sell skips (max 2)
 
   for (let qi = 0; qi < qSlice.length; qi++) {
     const [qDate, qPrice] = qSlice[qi];
@@ -631,7 +632,8 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
       const diff = currentTqqqValue - signalLine;
       let action = '';
 
-      // 30-down no-sell rule: if TQQQ price < 70% of 2-year high, don't sell
+      // 30-down no-sell rule: if TQQQ price < 70% of 2-year high, skip sell
+      // but only up to 2 consecutive quarters, then sell anyway
       const twoYearsAgo = (parseInt(qDate.substring(0, 4)) - 2) + qDate.substring(4);
       let peak2y = qPrice;
       for (let k = qi; k >= 0; k--) {
@@ -646,11 +648,21 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
         tqqqShares -= sharesToSell;
         cash += diff;
         action = 'SELL ' + fmt(diff);
-      } else if (diff > 0 && inCrashZone) {
-        // Signal says sell but we're in crash zone — hold
-        action = 'HOLD (30d)';
+        crashNoSellCount = 0;
+      } else if (diff > 0 && inCrashZone && crashNoSellCount < 2) {
+        // Signal says sell but we're in crash zone and haven't skipped 2 times yet — hold
+        crashNoSellCount++;
+        action = 'HOLD (30d ' + crashNoSellCount + '/2)';
+      } else if (diff > 0 && inCrashZone && crashNoSellCount >= 2) {
+        // Crash zone but already skipped 2 consecutive quarters — sell anyway
+        const sharesToSell = diff / qPrice;
+        tqqqShares -= sharesToSell;
+        cash += diff;
+        action = 'SELL ' + fmt(diff) + ' (30d expired)';
+        crashNoSellCount = 0;
       } else if (diff < 0 && cash > 0) {
         // BUY: TQQQ below signal, buy from cash (90% throttle)
+        crashNoSellCount = 0;
         const available = cash * 0.9;
         const needed = Math.min(-diff, available);
         if (needed > 0) {
@@ -662,6 +674,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
           action = 'HOLD';
         }
       } else {
+        crashNoSellCount = 0;
         action = 'HOLD';
       }
 
