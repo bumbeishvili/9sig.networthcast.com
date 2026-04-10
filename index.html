@@ -1010,8 +1010,8 @@ function render() {
       if (lastIdx < 0) return;
 
       const items = c.data.datasets.map((ds, i) => {
+        if (!c.isDatasetVisible(i)) return null;
         const meta = c.getDatasetMeta(i);
-        if (meta.hidden || ds.hidden) return null;
         const pt = meta.data[lastIdx];
         if (!pt) return null;
         return { y: pt.y, i, color: lineColors[i], name: lineNames[i], val: ds.data[lastIdx] };
