@@ -1111,6 +1111,7 @@ function render() {
           grid: { color: 'rgba(30,42,63,0.5)' }
         },
         y: {
+          beginAtZero: true,
           ticks: {
             color: '#64748b',
             font: { family: 'JetBrains Mono', size: 10 },
@@ -1279,6 +1280,25 @@ function saveSliders() {
     updateUI();
     onChanged();
   });
+
+  // Keyboard: arrow keys move the whole range when container is focused
+  container.setAttribute('tabindex', '0');
+  container.style.outline = 'none';
+  container.addEventListener('keydown', function(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const step = e.key === 'ArrowRight' ? 1 : -1;
+    let newEntry = +entryInput.value + step;
+    let newExit = +exitInput.value + step;
+    if (newEntry < 0 || newExit > getMax()) return;
+    entryInput.value = newEntry;
+    exitInput.value = newExit;
+    updateUI();
+    onChanged();
+  });
+
+  // Focus container when any part is interacted with
+  container.addEventListener('mousedown', () => container.focus());
 
   // Expose for init()
   window._dualRange = { updateUI, setMax };
