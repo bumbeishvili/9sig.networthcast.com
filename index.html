@@ -141,6 +141,9 @@
     border: none;
   }
 
+  #raise-section { max-height: 0; overflow: hidden; transition: max-height 0.2s ease; }
+  #raise-section.open { max-height: 80px; }
+
   .dual-range {
     position: relative;
     height: 32px;
@@ -467,13 +470,23 @@
     <div class="control-group">
       <label>Initial Investment</label>
       <div class="value-display" id="disp-initial">$10,000</div>
-      <input type="range" id="slider-initial" min="0" max="1000000" step="1000" value="10000">
+      <input type="range" id="slider-initial" min="0" max="1000" step="1" value="333">
     </div>
 
     <div class="control-group">
-      <label>Monthly Contribution</label>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <label>Monthly Contribution</label>
+        <button id="raise-toggle" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif" onclick="document.getElementById('raise-section').classList.toggle('open');this.textContent=document.getElementById('raise-section').classList.contains('open')?'less':'+ annual raise'">+ annual raise</button>
+      </div>
       <div class="value-display" id="disp-monthly">$500</div>
       <input type="range" id="slider-monthly" min="0" max="25000" step="50" value="500">
+      <div id="raise-section">
+        <div style="margin-top:10px">
+          <label style="font-size:11px">Annual Increase</label>
+          <div class="value-display" id="disp-raise" style="font-size:14px">0%</div>
+          <input type="range" id="slider-raise" min="0" max="20" step="0.5" value="0">
+        </div>
+      </div>
     </div>
 
     <div class="control-group">
@@ -520,6 +533,7 @@
               <th>9sig Total</th>
               <th>B&H TQQQ</th>
               <th>B&H QQQ</th>
+              <th>B&H SPY</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -555,11 +569,17 @@ async function loadTQQQDaily() {
   return parseDataFile(await resp.text());
 }
 
+async function loadSPYDaily() {
+  const resp = await fetch('simulation_tqqq_qqq - spy.tsv');
+  return parseDataFile(await resp.text());
+}
+
 // Build daily array: synthesize TQQQ before real data, use real data after
 const EXPENSE_DAILY = 0.0088 / 252;
 
-function buildDaily(qqqDaily, tqqqDaily) {
+function buildDaily(qqqDaily, tqqqDaily, spyDaily) {
   const tqqqMap = new Map(tqqqDaily.map(d => [d[0], d[1]]));
+  const spyMap = new Map(spyDaily.map(d => [d[0], d[1]]));
   const realStartDate = tqqqDaily[0][0];
 
   // Find where real TQQQ data begins in QQQ timeline
@@ -578,13 +598,13 @@ function buildDaily(qqqDaily, tqqqDaily) {
   const result = [];
   // Pre-2010: synthesized TQQQ
   for (let i = 0; i < preQQQ.length; i++) {
-    result.push({ date: preQQQ[i][0], qqq: preQQQ[i][1], tqqq: synthPrices[i] });
+    result.push({ date: preQQQ[i][0], qqq: preQQQ[i][1], tqqq: synthPrices[i], spy: spyMap.get(preQQQ[i][0]) || 0 });
   }
   // 2010+: real TQQQ prices matched with QQQ
   for (let i = junctionIdx; i < qqqDaily.length; i++) {
     const tqqqPrice = tqqqMap.get(qqqDaily[i][0]);
     if (tqqqPrice != null) {
-      result.push({ date: qqqDaily[i][0], qqq: qqqDaily[i][1], tqqq: tqqqPrice });
+      result.push({ date: qqqDaily[i][0], qqq: qqqDaily[i][1], tqqq: tqqqPrice, spy: spyMap.get(qqqDaily[i][0]) || 0 });
     }
   }
   return result;
@@ -621,6 +641,27 @@ function qLabel(dateStr) {
   return q + ' ' + y;
 }
 
+// Logarithmic slider for initial investment: slider 0-1000 maps to $0-$100M
+// slider 0 = $0, slider 1-1000 = log scale from $100 to $100M
+function sliderToInitial(s) {
+  if (s <= 0) return 0;
+  // Map 1-1000 to log($100) - log($100M) = 2 - 8
+  const minLog = 2, maxLog = 8; // 10^2=100, 10^8=100M
+  const logVal = minLog + (s / 1000) * (maxLog - minLog);
+  const raw = Math.pow(10, logVal);
+  // Round: $100 steps under $10K, $1K steps under $100K, $100K steps above
+  if (raw < 10000) return Math.round(raw / 100) * 100;
+  if (raw < 100000) return Math.round(raw / 1000) * 1000;
+  return Math.round(raw / 100000) * 100000;
+}
+
+function initialToSlider(v) {
+  if (v <= 0) return 0;
+  const minLog = 2, maxLog = 8;
+  const logVal = Math.log10(Math.max(v, 100));
+  return Math.round(((logVal - minLog) / (maxLog - minLog)) * 1000);
+}
+
 function fmt(n) {
   if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
   if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
@@ -631,9 +672,10 @@ function fmtFull(n) {
   return '$' + Math.round(n).toLocaleString('en-US');
 }
 
-function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
+function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise) {
   const monthlyRate = annualRate / 12;
   const qGrowth = 0.09; // 9% quarterly signal line growth
+  annualRaise = annualRaise || 0;
 
   const qSlice = quarterlyData.slice(entryIdx, exitIdx + 1);
   if (qSlice.length < 2) return { log: [], bhPoints: [], qqqPoints: [], totalContributed: initial };
@@ -644,6 +686,8 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
   let signalLine = initial * 0.7; // target TQQQ value starts at initial TQQQ allocation
   let totalInvested = initial;
   let investedCompounded = initial;
+  let currentMonthly = monthly;
+  const startYear = parseInt(qSlice[0][0].substring(0, 4));
 
   const log = [];
   let prevQDate = qSlice[0][0];
@@ -653,18 +697,25 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
     const [qDate, qPrice] = qSlice[qi];
 
     if (qi > 0) {
+      // Annual raise: increase monthly contribution at each new year
+      const currentYear = parseInt(qDate.substring(0, 4));
+      const prevYear = parseInt(prevQDate.substring(0, 4));
+      if (currentYear > prevYear) {
+        currentMonthly = monthly * Math.pow(1 + annualRaise, currentYear - startYear);
+      }
+
       // Add monthly contributions: 100% goes to cash, signal line rises by 50% of new cash
       let newCashThisQ = 0;
       for (const [mDate] of monthlyData) {
         if (mDate > prevQDate && mDate <= qDate) {
-          cash += monthly;
-          totalInvested += monthly;
-          newCashThisQ += monthly;
+          cash += currentMonthly;
+          totalInvested += currentMonthly;
+          newCashThisQ += currentMonthly;
           // Apply monthly interest on cash
           cash *= (1 + monthlyRate);
           // Compound invested baseline
           investedCompounded *= (1 + monthlyRate);
-          investedCompounded += monthly;
+          investedCompounded += currentMonthly;
         }
       }
 
@@ -741,9 +792,11 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
   for (let qi = 0; qi < qSlice.length; qi++) {
     const [qDate, qPrice] = qSlice[qi];
     if (qi > 0) {
+      const yr = parseInt(qDate.substring(0, 4));
+      const bhMonthly = monthly * Math.pow(1 + annualRaise, yr - startYear);
       for (const [mDate, mPrice] of monthlyData) {
         if (mDate > bhPrevQ && mDate <= qDate) {
-          bhShares += monthly / mPrice;
+          bhShares += bhMonthly / mPrice;
         }
       }
     }
@@ -759,9 +812,11 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
   for (let qi = 0; qi < qSlice.length; qi++) {
     const [qDate, , qqqPrice] = qSlice[qi];
     if (qi > 0) {
+      const yr = parseInt(qDate.substring(0, 4));
+      const qqqMonthly = monthly * Math.pow(1 + annualRaise, yr - startYear);
       for (const [mDate, , mQqqPrice] of monthlyData) {
         if (mDate > qqqPrevQ && mDate <= qDate) {
-          qqqShares += monthly / mQqqPrice;
+          qqqShares += qqqMonthly / mQqqPrice;
         }
       }
     }
@@ -769,15 +824,36 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx) {
     qqqPrevQ = qDate;
   }
 
-  return { log, bhPoints, qqqPoints, totalContributed: totalInvested };
+  // Buy & hold SPY
+  let spyShares = qSlice[0][3] ? initial / qSlice[0][3] : 0;
+  let spyPrevQ = qSlice[0][0];
+  const spyPoints = [];
+
+  for (let qi = 0; qi < qSlice.length; qi++) {
+    const [qDate, , , spyPrice] = qSlice[qi];
+    if (qi > 0 && spyPrice) {
+      const yr = parseInt(qDate.substring(0, 4));
+      const spyMonthly = monthly * Math.pow(1 + annualRaise, yr - startYear);
+      for (const [mDate, , , mSpyPrice] of monthlyData) {
+        if (mDate > spyPrevQ && mDate <= qDate && mSpyPrice) {
+          spyShares += spyMonthly / mSpyPrice;
+        }
+      }
+    }
+    spyPoints.push({ date: qDate, value: spyPrice ? spyShares * spyPrice : 0 });
+    spyPrevQ = qDate;
+  }
+
+  return { log, bhPoints, qqqPoints, spyPoints, totalContributed: totalInvested };
 }
 
 let chart = null;
 
 function render() {
   if (!quarterlyData) return; // data not loaded yet
-  const initial = +document.getElementById('slider-initial').value;
+  const initial = sliderToInitial(+document.getElementById('slider-initial').value);
   const monthly = +document.getElementById('slider-monthly').value;
+  const annualRaise = +document.getElementById('slider-raise').value / 100;
   const rate = +document.getElementById('slider-rate').value / 100;
   let entryIdx = +document.getElementById('slider-entry').value;
   let exitIdx = +document.getElementById('slider-exit').value;
@@ -790,12 +866,14 @@ function render() {
 
   document.getElementById('disp-initial').textContent = fmtFull(initial);
   document.getElementById('disp-monthly').textContent = fmtFull(monthly);
+  const raiseVal = annualRaise * 100;
+  document.getElementById('disp-raise').textContent = (raiseVal % 1 === 0 ? raiseVal.toFixed(0) : raiseVal.toFixed(1)) + '%';
   const rv = (rate * 100);
   document.getElementById('disp-rate').textContent = (rv % 1 === 0 ? rv.toFixed(1) : rv.toFixed(2)) + '%';
   document.getElementById('disp-entry').textContent = qLabel(quarterlyData[entryIdx][0]);
   document.getElementById('disp-exit').textContent = qLabel(quarterlyData[exitIdx][0]);
 
-  const { log, bhPoints, qqqPoints, totalContributed } = simulate(initial, monthly, rate, entryIdx, exitIdx);
+  const { log, bhPoints, qqqPoints, spyPoints, totalContributed } = simulate(initial, monthly, rate, entryIdx, exitIdx, annualRaise);
 
   if (log.length < 1) {
     document.getElementById('stats-grid').innerHTML = '<div class="stat-card" style="grid-column:span 2"><div class="stat-label">Select a wider period</div></div>';
@@ -807,11 +885,13 @@ function render() {
   const finalLog = log[log.length - 1];
   const finalBH = bhPoints[bhPoints.length - 1].value;
   const finalQQQ = qqqPoints[qqqPoints.length - 1].value;
+  const finalSPY = spyPoints[spyPoints.length - 1].value;
   const years = log.length > 1 ? (new Date(log[log.length-1].date) - new Date(log[0].date)) / (365.25*86400000) : 1;
   const cagr = (end, start) => years > 0 && start > 0 ? (Math.pow(end / start, 1 / years) - 1) * 100 : 0;
   const ret9 = cagr(finalLog.total, totalContributed);
   const retBH = cagr(finalBH, totalContributed);
   const retQQQ = cagr(finalQQQ, totalContributed);
+  const retSPY = cagr(finalSPY, totalContributed);
 
   document.getElementById('stats-grid').innerHTML = `
     <div class="stat-card">
@@ -839,6 +919,14 @@ function render() {
       <div class="stat-value ${retQQQ >= 0 ? 'positive' : 'negative'}">${retQQQ >= 0 ? '+' : ''}${retQQQ.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
+      <div class="stat-label">B&H SPY</div>
+      <div class="stat-value" style="color:#f472b6">${fmtFull(finalSPY)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">B&H SPY Annualized</div>
+      <div class="stat-value ${retSPY >= 0 ? 'positive' : 'negative'}">${retSPY >= 0 ? '+' : ''}${retSPY.toFixed(1)}%</div>
+    </div>
+    <div class="stat-card">
       <div class="stat-label">Invested Compounded</div>
       <div class="stat-value" style="color:var(--text)">${fmtFull(finalLog.investedCompounded)}</div>
     </div>
@@ -855,6 +943,7 @@ function render() {
   const cashD = log.map(l => l.cash);
   const bhD = bhPoints.map(b => b.value);
   const qqqD = qqqPoints.map(q => q.value);
+  const spyD = spyPoints.map(s => s.value);
   const invD = log.map(l => l.investedCompounded);
   const targetD = log.map(l => l.target);
 
@@ -864,15 +953,16 @@ function render() {
     chart.data.datasets[1].data = tqqqValD;
     chart.data.datasets[2].data = bhD;
     chart.data.datasets[3].data = qqqD;
-    chart.data.datasets[4].data = targetD;
-    chart.data.datasets[5].data = cashD;
-    chart.data.datasets[6].data = invD;
+    chart.data.datasets[4].data = spyD;
+    chart.data.datasets[5].data = targetD;
+    chart.data.datasets[6].data = cashD;
+    chart.data.datasets[7].data = invD;
     chart.update('none');
   } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
-  const lineColors = ['#22d3ee', '#38bdf8', '#a78bfa', '#4ade80', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
-  const lineNames = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', '9sig TQQQ Target', '9sig Cash', 'Invested Compounded'];
+  const lineColors = ['#22d3ee', '#38bdf8', '#a78bfa', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
+  const lineNames = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', 'B&H SPY', '9sig TQQQ Target', '9sig Cash', 'Invested Compounded'];
 
   const externalTooltip = (context) => {
     const { chart: c, tooltip } = context;
@@ -884,7 +974,7 @@ function render() {
 
     const ds = c.data.datasets;
     const date = c.data.labels[idx];
-    const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx], ds[6].data[idx]];
+    const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx], ds[6].data[idx], ds[7].data[idx]];
 
     el.innerHTML = `
       <div class="tt-date">${qLabel(date)}</div>
@@ -929,13 +1019,19 @@ function render() {
 
       // Sort by y position and de-overlap
       items.sort((a, b) => a.y - b.y);
-      const gap = 30;
+      const gap = 26;
+      // Push down pass
       for (let k = 1; k < items.length; k++) {
         if (items[k].y - items[k - 1].y < gap) {
           items[k].y = items[k - 1].y + gap;
         }
       }
-      // Clamp within chart area
+      // Push up pass if overflowing bottom
+      for (let k = items.length - 1; k >= 0; k--) {
+        const maxY = area.bottom - 5 - (items.length - 1 - k) * gap;
+        if (items[k].y > maxY) items[k].y = maxY;
+      }
+      // Final clamp
       items.forEach(it => {
         if (it.y < area.top + 10) it.y = area.top + 10;
         if (it.y > area.bottom - 5) it.y = area.bottom - 5;
@@ -1011,7 +1107,7 @@ function render() {
           hidden: true
         },
         {
-          label: 'Buy & Hold',
+          label: 'B&H TQQQ',
           data: bhD,
           borderColor: '#a78bfa',
           backgroundColor: 'transparent',
@@ -1032,7 +1128,20 @@ function render() {
           pointRadius: 0,
           pointHitRadius: 10,
           borderWidth: 2,
-          borderDash: [8, 4]
+          borderDash: [8, 4],
+          hidden: true
+        },
+        {
+          label: 'B&H SPY',
+          data: spyD,
+          borderColor: '#f472b6',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          pointHitRadius: 10,
+          borderWidth: 2,
+          borderDash: [6, 3]
         },
         {
           label: '9sig TQQQ Target',
@@ -1129,6 +1238,7 @@ function render() {
     const ac = l.action.startsWith('SELL') ? 'action-sell' : l.action.startsWith('BUY') ? 'action-buy' : 'action-hold';
     const bhVal = bhPoints[i] ? bhPoints[i].value : 0;
     const qqqVal = qqqPoints[i] ? qqqPoints[i].value : 0;
+    const spyVal = spyPoints[i] ? spyPoints[i].value : 0;
     return `<tr>
       <td>${l.date.substring(0,7)}</td>
       <td>${fmtFull(l.invested)}</td>
@@ -1138,6 +1248,7 @@ function render() {
       <td>${fmtFull(Math.round(l.total))}</td>
       <td style="color:#a78bfa">${fmtFull(Math.round(bhVal))}</td>
       <td style="color:#4ade80">${fmtFull(Math.round(qqqVal))}</td>
+      <td style="color:#f472b6">${fmtFull(Math.round(spyVal))}</td>
       <td class="${ac}">${l.action}</td>
     </tr>`;
   }).join('');
@@ -1145,7 +1256,7 @@ function render() {
 
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-rate','slider-entry','slider-exit'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit'];
 const LS_KEY = '9sig-sliders';
 
 function saveSliders() {
@@ -1155,7 +1266,7 @@ function saveSliders() {
 }
 
 // Regular sliders (not entry/exit — those are handled by dual-range)
-['slider-initial','slider-monthly','slider-rate'].forEach(id => {
+['slider-initial','slider-monthly','slider-raise','slider-rate'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => { saveSliders(); render(); });
 });
 
@@ -1309,6 +1420,7 @@ function shareConfig() {
   const params = new URLSearchParams();
   params.set('i', document.getElementById('slider-initial').value);
   params.set('m', document.getElementById('slider-monthly').value);
+  params.set('a', document.getElementById('slider-raise').value);
   params.set('r', document.getElementById('slider-rate').value);
   params.set('e', document.getElementById('slider-entry').value);
   params.set('x', document.getElementById('slider-exit').value);
@@ -1329,22 +1441,22 @@ function shareConfig() {
 
 // Initialize: load CSV, derive data, set slider max, restore state, render
 (async function init() {
-  let QQQ_DAILY, TQQQ_DAILY;
+  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY;
   try {
-    [QQQ_DAILY, TQQQ_DAILY] = await Promise.all([loadQQQDaily(), loadTQQQDaily()]);
+    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY] = await Promise.all([loadQQQDaily(), loadTQQQDaily(), loadSPYDaily()]);
   } catch(e) {
-    console.error('Failed to load CSV data:', e);
+    console.error('Failed to load data:', e);
     return;
   }
-  daily = buildDaily(QQQ_DAILY, TQQQ_DAILY);
-  quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq]);
-  monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq]);
+  daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY);
+  quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy]);
+  monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy]);
   const maxQIdx = quarterlyData.length - 1;
   document.getElementById('slider-exit').value = maxQIdx;
   window._dualRange.setMax(maxQIdx);
   // Restore saved state: URL params > localStorage > defaults
   const params = new URLSearchParams(window.location.search);
-  const urlMap = { i: 'slider-initial', m: 'slider-monthly', r: 'slider-rate', e: 'slider-entry', x: 'slider-exit' };
+  const urlMap = { i: 'slider-initial', m: 'slider-monthly', a: 'slider-raise', r: 'slider-rate', e: 'slider-entry', x: 'slider-exit' };
   let hasUrlParams = false;
   for (const [key, sliderId] of Object.entries(urlMap)) {
     const val = params.get(key);
@@ -1357,6 +1469,11 @@ function shareConfig() {
     } catch(e) {}
   }
   window._dualRange.updateUI();
+  // Auto-open raise section if non-zero value was restored
+  if (+document.getElementById('slider-raise').value > 0) {
+    document.getElementById('raise-section').classList.add('open');
+    document.getElementById('raise-toggle').textContent = 'less';
+  }
   render();
 })();
 </script>
