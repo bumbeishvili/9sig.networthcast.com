@@ -479,7 +479,7 @@
         <button id="raise-toggle" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif" onclick="document.getElementById('raise-section').classList.toggle('open');this.textContent=document.getElementById('raise-section').classList.contains('open')?'less':'+ annual raise'">+ annual raise</button>
       </div>
       <div class="value-display" id="disp-monthly">$500</div>
-      <input type="range" id="slider-monthly" min="0" max="25000" step="50" value="500">
+      <input type="range" id="slider-monthly" min="0" max="100000" step="50" value="500">
       <div id="raise-section">
         <div style="margin-top:10px">
           <label style="font-size:11px">Annual Increase</label>
@@ -649,10 +649,12 @@ function sliderToInitial(s) {
   const minLog = 2, maxLog = 8; // 10^2=100, 10^8=100M
   const logVal = minLog + (s / 1000) * (maxLog - minLog);
   const raw = Math.pow(10, logVal);
-  // Round: $100 steps under $10K, $1K steps under $100K, $100K steps above
+  // Round: $100 under $10K, $1K under $100K, $10K under $1M, $100K under $10M, $1M above
   if (raw < 10000) return Math.round(raw / 100) * 100;
   if (raw < 100000) return Math.round(raw / 1000) * 1000;
-  return Math.round(raw / 100000) * 100000;
+  if (raw < 1000000) return Math.round(raw / 10000) * 10000;
+  if (raw < 10000000) return Math.round(raw / 100000) * 100000;
+  return Math.round(raw / 1000000) * 1000000;
 }
 
 function initialToSlider(v) {
