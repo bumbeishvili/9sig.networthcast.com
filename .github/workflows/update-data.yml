@@ -1,0 +1,39 @@
+name: Update market data
+
+on:
+  schedule:
+    # 15:30 UTC on weekdays = 11:30 AM ET (EDT) / 10:30 AM ET (EST)
+    # Either way, at least 2 hours after the 9:30 AM ET market open.
+    - cron: '30 15 * * 1-5'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install yfinance
+        run: pip install yfinance
+
+      - name: Refresh QQQ / TQQQ / SPY
+        run: python3 update_data.py
+
+      - name: Commit and push if data changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- '*.tsv'; then
+            echo "No data changes."
+            exit 0
+          fi
+          git add ./*.tsv
+          git commit -m "Refresh market data $(date -u +%Y-%m-%d)"
+          git push
