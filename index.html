@@ -141,8 +141,27 @@
     border: none;
   }
 
-  #raise-section { max-height: 0; overflow: hidden; transition: max-height 0.2s ease; }
-  #raise-section.open { max-height: 80px; }
+  #advanced-section { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+  #advanced-section.open { max-height: 600px; }
+
+  #advanced-toggle {
+    width: 100%;
+    background: none;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 18px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  #advanced-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 
   .dual-range {
     position: relative;
@@ -474,25 +493,44 @@
     </div>
 
     <div class="control-group">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <label>Monthly Contribution</label>
-        <button id="raise-toggle" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif" onclick="document.getElementById('raise-section').classList.toggle('open');this.textContent=document.getElementById('raise-section').classList.contains('open')?'less':'+ annual raise'">+ annual raise</button>
-      </div>
+      <label>Monthly Contribution</label>
       <div class="value-display" id="disp-monthly">$500</div>
       <input type="range" id="slider-monthly" min="0" max="100000" step="50" value="500">
-      <div id="raise-section">
-        <div style="margin-top:10px">
-          <label style="font-size:11px">Annual Increase</label>
-          <div class="value-display" id="disp-raise" style="font-size:14px">0%</div>
-          <input type="range" id="slider-raise" min="0" max="20" step="0.5" value="0">
-        </div>
-      </div>
     </div>
 
-    <div class="control-group">
-      <label>Cash Interest Rate (Annual)</label>
-      <div class="value-display" id="disp-rate">4.0%</div>
-      <input type="range" id="slider-rate" min="0" max="15" step="0.25" value="4">
+    <button id="advanced-toggle" onclick="toggleAdvanced()">+ advanced</button>
+
+    <div id="advanced-section">
+      <div class="control-group">
+        <label>Annual Increase</label>
+        <div class="value-display" id="disp-raise">0%</div>
+        <input type="range" id="slider-raise" min="0" max="20" step="0.5" value="0">
+      </div>
+
+      <div class="control-group">
+        <label>Cash Interest Rate (Annual)</label>
+        <div class="value-display" id="disp-rate">4.0%</div>
+        <input type="range" id="slider-rate" min="0" max="15" step="0.25" value="4">
+      </div>
+
+      <div class="control-group">
+        <label>Date Shift Envelopes</label>
+        <div style="display:flex;gap:18px;margin:6px 0 8px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;margin:0">
+            <input type="checkbox" id="toggle-envelope" style="cursor:pointer;accent-color:var(--accent)">
+            <span style="color:var(--accent)">9sig</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;margin:0">
+            <input type="checkbox" id="toggle-bh-envelope" style="cursor:pointer;accent-color:var(--red)">
+            <span style="color:var(--red)">B&amp;H TQQQ</span>
+          </label>
+        </div>
+        <div class="value-display" id="disp-envelope-opacity" style="font-size:14px">opacity 0.10</div>
+        <input type="range" id="slider-envelope-opacity" min="1" max="50" step="1" value="10">
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.4" id="envelope-note">
+          Each ghost line replays the same strategy with rebalance/entry shifted N trading days earlier within the quarter.
+        </div>
+      </div>
     </div>
 
     <div class="divider"></div>
@@ -560,51 +598,30 @@ function parseDataFile(text) {
 }
 
 async function loadQQQDaily() {
-  const resp = await fetch('simulation_tqqq_qqq - qqq.tsv');
+  const resp = await fetch('simulation_tqqq_qqq - qqq.tsv?v=baked');
   return parseDataFile(await resp.text());
 }
 
 async function loadTQQQDaily() {
-  const resp = await fetch('simulation_tqqq_qqq - tqqq.tsv');
+  const resp = await fetch('simulation_tqqq_qqq - tqqq.tsv?v=baked');
   return parseDataFile(await resp.text());
 }
 
 async function loadSPYDaily() {
-  const resp = await fetch('simulation_tqqq_qqq - spy.tsv');
+  const resp = await fetch('simulation_tqqq_qqq - spy.tsv?v=baked');
   return parseDataFile(await resp.text());
 }
 
-// Build daily array: synthesize TQQQ before real data, use real data after
-const EXPENSE_DAILY = 0.0088 / 252;
-
+// Merge daily TSVs by date. The TQQQ TSV already contains synthesized pre-2010
+// rows (baked by update_data.py), so this is a straight join — no synthesis here.
 function buildDaily(qqqDaily, tqqqDaily, spyDaily) {
   const tqqqMap = new Map(tqqqDaily.map(d => [d[0], d[1]]));
   const spyMap = new Map(spyDaily.map(d => [d[0], d[1]]));
-  const realStartDate = tqqqDaily[0][0];
-
-  // Find where real TQQQ data begins in QQQ timeline
-  const junctionIdx = qqqDaily.findIndex(d => d[0] >= realStartDate);
-  const realStartPrice = tqqqDaily[0][1];
-
-  // Synthesize pre-2010: work backwards from the real TQQQ start price
-  const preQQQ = qqqDaily.slice(0, junctionIdx);
-  const synthPrices = new Array(preQQQ.length);
-  synthPrices[preQQQ.length - 1] = realStartPrice;
-  for (let i = preQQQ.length - 1; i > 0; i--) {
-    const qqqReturn = (preQQQ[i][1] - preQQQ[i - 1][1]) / preQQQ[i - 1][1];
-    synthPrices[i - 1] = Math.max(synthPrices[i] / (1 + 3 * qqqReturn - EXPENSE_DAILY), 0);
-  }
-
   const result = [];
-  // Pre-2010: synthesized TQQQ
-  for (let i = 0; i < preQQQ.length; i++) {
-    result.push({ date: preQQQ[i][0], qqq: preQQQ[i][1], tqqq: synthPrices[i], spy: spyMap.get(preQQQ[i][0]) || 0 });
-  }
-  // 2010+: real TQQQ prices matched with QQQ
-  for (let i = junctionIdx; i < qqqDaily.length; i++) {
-    const tqqqPrice = tqqqMap.get(qqqDaily[i][0]);
+  for (const [date, qqqPrice] of qqqDaily) {
+    const tqqqPrice = tqqqMap.get(date);
     if (tqqqPrice != null) {
-      result.push({ date: qqqDaily[i][0], qqq: qqqDaily[i][1], tqqq: tqqqPrice, spy: spyMap.get(qqqDaily[i][0]) || 0 });
+      result.push({ date, qqq: qqqPrice, tqqq: tqqqPrice, spy: spyMap.get(date) || 0 });
     }
   }
   return result;
@@ -633,6 +650,55 @@ function getMonth(dateStr) {
 }
 
 let quarterlyData, monthlyData; // populated by init()
+let dailyDateToIdx; // populated by init()
+let shiftedQuarterlyCache = []; // populated by init() — array of qData arrays, indexed [shift-1]
+let envelopeShiftCount = 0; // populated by init()
+
+function computeMaxShift() {
+  if (!quarterlyData || quarterlyData.length < 2) return 0;
+  let minLen = Infinity;
+  for (let i = 1; i < quarterlyData.length; i++) {
+    const a = dailyDateToIdx.get(quarterlyData[i - 1][0]);
+    const b = dailyDateToIdx.get(quarterlyData[i][0]);
+    if (a != null && b != null) minLen = Math.min(minLen, b - a);
+  }
+  return Number.isFinite(minLen) ? Math.max(1, minLen - 1) : 0;
+}
+
+function getShiftedQuarterly(dayShift) {
+  return quarterlyData.map(q => {
+    const naturalIdx = dailyDateToIdx.get(q[0]);
+    if (naturalIdx == null) return q;
+    const shiftedIdx = Math.max(0, naturalIdx - dayShift);
+    const d = daily[shiftedIdx];
+    return [d.date, d.tqqq, d.qqq, d.spy];
+  });
+}
+
+function simulateBhTqqq(initial, monthly, annualRaise, entryIdx, exitIdx, qData) {
+  qData = qData || quarterlyData;
+  const qSlice = qData.slice(entryIdx, exitIdx + 1);
+  if (qSlice.length < 1) return [];
+  const startYear = parseInt(qSlice[0][0].substring(0, 4));
+  let bhShares = initial / qSlice[0][1];
+  let bhPrevQ = qSlice[0][0];
+  const points = [];
+  for (let qi = 0; qi < qSlice.length; qi++) {
+    const [qDate, qPrice] = qSlice[qi];
+    if (qi > 0) {
+      const yr = parseInt(qDate.substring(0, 4));
+      const bhMonthly = monthly * Math.pow(1 + annualRaise, yr - startYear);
+      for (const [mDate, mPrice] of monthlyData) {
+        if (mDate > bhPrevQ && mDate <= qDate) {
+          bhShares += bhMonthly / mPrice;
+        }
+      }
+    }
+    points.push(bhShares * qPrice);
+    bhPrevQ = qDate;
+  }
+  return points;
+}
 
 function qLabel(dateStr) {
   const y = dateStr.substring(0, 4);
@@ -674,12 +740,15 @@ function fmtFull(n) {
   return '$' + Math.round(n).toLocaleString('en-US');
 }
 
-function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise) {
+function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, opts) {
   const monthlyRate = annualRate / 12;
   const qGrowth = 0.09; // 9% quarterly signal line growth
   annualRaise = annualRaise || 0;
+  opts = opts || {};
+  const qData = opts.qData || quarterlyData;
+  const skipBH = !!opts.skipBH;
 
-  const qSlice = quarterlyData.slice(entryIdx, exitIdx + 1);
+  const qSlice = qData.slice(entryIdx, exitIdx + 1);
   if (qSlice.length < 2) return { log: [], bhPoints: [], qqqPoints: [], totalContributed: initial };
 
   // Initial 70/30 allocation: 70% TQQQ, 30% cash/bond
@@ -786,6 +855,8 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise) 
     prevQDate = qDate;
   }
 
+  if (skipBH) return { log, totalContributed: totalInvested };
+
   // Buy & hold TQQQ
   let bhShares = initial / qSlice[0][1];
   let bhPrevQ = qSlice[0][0];
@@ -860,11 +931,19 @@ function render() {
   let entryIdx = +document.getElementById('slider-entry').value;
   let exitIdx = +document.getElementById('slider-exit').value;
 
-  // Ensure entry < exit
+  // Clamp to valid range — saved values from a prior dataset may be stale.
+  const maxIdx = quarterlyData.length - 1;
+  if (!Number.isFinite(entryIdx) || entryIdx < 0) entryIdx = 0;
+  if (!Number.isFinite(exitIdx)  || exitIdx  < 0) exitIdx  = maxIdx;
+  if (entryIdx > maxIdx) entryIdx = maxIdx;
+  if (exitIdx  > maxIdx) exitIdx  = maxIdx;
   if (entryIdx >= exitIdx) {
-    exitIdx = Math.min(entryIdx + 1, quarterlyData.length - 1);
-    document.getElementById('slider-exit').value = exitIdx;
+    exitIdx  = Math.min(entryIdx + 1, maxIdx);
+    entryIdx = Math.min(entryIdx, exitIdx - 1);
+    if (entryIdx < 0) entryIdx = 0;
   }
+  document.getElementById('slider-entry').value = entryIdx;
+  document.getElementById('slider-exit').value  = exitIdx;
 
   document.getElementById('disp-initial').textContent = fmtFull(initial);
   document.getElementById('disp-monthly').textContent = fmtFull(monthly);
@@ -876,6 +955,19 @@ function render() {
   document.getElementById('disp-exit').textContent = qLabel(quarterlyData[exitIdx][0]);
 
   const { log, bhPoints, qqqPoints, spyPoints, totalContributed } = simulate(initial, monthly, rate, entryIdx, exitIdx, annualRaise);
+
+  const showEnvelope = document.getElementById('toggle-envelope').checked;
+  const showBhEnvelope = document.getElementById('toggle-bh-envelope').checked;
+  const opacityVal = +document.getElementById('slider-envelope-opacity').value / 100;
+  document.getElementById('disp-envelope-opacity').textContent = 'opacity ' + opacityVal.toFixed(2);
+  const envColor = `rgba(34,211,238,${opacityVal})`;
+  const envColorBh = `rgba(248,113,113,${opacityVal})`;
+  const shiftResults = showEnvelope
+    ? shiftedQuarterlyCache.map(qData => simulate(initial, monthly, rate, entryIdx, exitIdx, annualRaise, { qData, skipBH: true }).log.map(l => l.total))
+    : [];
+  const bhShiftResults = showBhEnvelope
+    ? shiftedQuarterlyCache.map(qData => simulateBhTqqq(initial, monthly, annualRaise, entryIdx, exitIdx, qData))
+    : [];
 
   if (log.length < 1) {
     document.getElementById('stats-grid').innerHTML = '<div class="stat-card" style="grid-column:span 2"><div class="stat-label">Select a wider period</div></div>';
@@ -906,7 +998,7 @@ function render() {
     </div>
     <div class="stat-card">
       <div class="stat-label">B&H TQQQ</div>
-      <div class="stat-value" style="color:var(--accent2)">${fmtFull(finalBH)}</div>
+      <div class="stat-value" style="color:var(--red)">${fmtFull(finalBH)}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">B&H TQQQ Annualized</div>
@@ -959,11 +1051,38 @@ function render() {
     chart.data.datasets[5].data = targetD;
     chart.data.datasets[6].data = cashD;
     chart.data.datasets[7].data = invD;
+    while (chart.data.datasets.length < 8 + envelopeShiftCount * 2) {
+      const offset = chart.data.datasets.length - 8;
+      const isBh = offset >= envelopeShiftCount;
+      chart.data.datasets.push({
+        label: (isBh ? '_bhshift_' : '_shift_') + ((offset % envelopeShiftCount) + 1),
+        data: [],
+        borderColor: isBh ? envColorBh : envColor,
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHitRadius: 0,
+        borderWidth: 1,
+        order: -1,
+        _isShift: true
+      });
+    }
+    for (let i = 0; i < envelopeShiftCount; i++) {
+      const ds9 = chart.data.datasets[8 + i];
+      ds9.data = showEnvelope ? (shiftResults[i] || []) : [];
+      ds9.borderColor = envColor;
+      ds9.hidden = !showEnvelope;
+      const dsB = chart.data.datasets[8 + envelopeShiftCount + i];
+      dsB.data = showBhEnvelope ? (bhShiftResults[i] || []) : [];
+      dsB.borderColor = envColorBh;
+      dsB.hidden = !showBhEnvelope;
+    }
     chart.update('none');
   } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
-  const lineColors = ['#22d3ee', '#38bdf8', '#a78bfa', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
+  const lineColors = ['#22d3ee', '#38bdf8', '#f87171', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
   const lineNames = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', 'B&H SPY', '9sig TQQQ Target', '9sig Cash', 'Invested Compounded'];
 
   const externalTooltip = (context) => {
@@ -1012,6 +1131,7 @@ function render() {
       if (lastIdx < 0) return;
 
       const items = c.data.datasets.map((ds, i) => {
+        if (ds._isShift) return null;
         if (!c.isDatasetVisible(i)) return null;
         const meta = c.getDatasetMeta(i);
         const pt = meta.data[lastIdx];
@@ -1111,7 +1231,7 @@ function render() {
         {
           label: 'B&H TQQQ',
           data: bhD,
-          borderColor: '#a78bfa',
+          borderColor: '#f87171',
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -1181,7 +1301,35 @@ function render() {
           pointHitRadius: 10,
           borderWidth: 1.5,
           borderDash: [3, 3]
-        }
+        },
+        ...Array.from({ length: envelopeShiftCount }, (_, i) => ({
+          label: '_shift_' + (i + 1),
+          data: showEnvelope ? (shiftResults[i] || []) : [],
+          borderColor: envColor,
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          pointHitRadius: 0,
+          borderWidth: 1,
+          order: -1,
+          hidden: !showEnvelope,
+          _isShift: true
+        })),
+        ...Array.from({ length: envelopeShiftCount }, (_, i) => ({
+          label: '_bhshift_' + (i + 1),
+          data: showBhEnvelope ? (bhShiftResults[i] || []) : [],
+          borderColor: envColorBh,
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          pointHitRadius: 0,
+          borderWidth: 1,
+          order: -1,
+          hidden: !showBhEnvelope,
+          _isShift: true
+        }))
       ]
     },
     options: {
@@ -1200,7 +1348,8 @@ function render() {
             pointStyle: 'circle',
             padding: 16,
             boxWidth: 8,
-            boxHeight: 8
+            boxHeight: 8,
+            filter: (item, data) => !data.datasets[item.datasetIndex]._isShift
           }
         },
         tooltip: {
@@ -1248,7 +1397,7 @@ function render() {
       <td style="color:#fb923c">${fmtFull(Math.round(l.target))}</td>
       <td>${fmtFull(Math.round(l.cash))}</td>
       <td>${fmtFull(Math.round(l.total))}</td>
-      <td style="color:#a78bfa">${fmtFull(Math.round(bhVal))}</td>
+      <td style="color:#f87171">${fmtFull(Math.round(bhVal))}</td>
       <td style="color:#4ade80">${fmtFull(Math.round(qqqVal))}</td>
       <td style="color:#f472b6">${fmtFull(Math.round(spyVal))}</td>
       <td class="${ac}">${l.action}</td>
@@ -1258,12 +1407,15 @@ function render() {
 
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','slider-envelope-opacity'];
 const LS_KEY = '9sig-sliders';
 
 function saveSliders() {
   const vals = {};
   SLIDER_IDS.forEach(id => vals[id] = document.getElementById(id).value);
+  vals['toggle-envelope'] = document.getElementById('toggle-envelope').checked;
+  vals['toggle-bh-envelope'] = document.getElementById('toggle-bh-envelope').checked;
+  vals['advanced-open'] = document.getElementById('advanced-section').classList.contains('open');
   try { localStorage.setItem(LS_KEY, JSON.stringify(vals)); } catch(e) {}
 }
 
@@ -1271,6 +1423,39 @@ function saveSliders() {
 ['slider-initial','slider-monthly','slider-raise','slider-rate'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => { saveSliders(); render(); });
 });
+
+// Envelope opacity: just retint existing shift datasets, no re-simulation
+document.getElementById('slider-envelope-opacity').addEventListener('input', () => {
+  const v = +document.getElementById('slider-envelope-opacity').value / 100;
+  document.getElementById('disp-envelope-opacity').textContent = 'opacity ' + v.toFixed(2);
+  if (chart) {
+    const c9 = `rgba(34,211,238,${v})`;
+    const cB = `rgba(248,113,113,${v})`;
+    for (let i = 0; i < envelopeShiftCount; i++) {
+      const ds9 = chart.data.datasets[8 + i];
+      if (ds9) ds9.borderColor = c9;
+      const dsB = chart.data.datasets[8 + envelopeShiftCount + i];
+      if (dsB) dsB.borderColor = cB;
+    }
+    chart.update('none');
+  }
+  saveSliders();
+});
+
+['toggle-envelope', 'toggle-bh-envelope'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    saveSliders();
+    render();
+  });
+});
+
+function toggleAdvanced() {
+  const sec = document.getElementById('advanced-section');
+  sec.classList.toggle('open');
+  const open = sec.classList.contains('open');
+  document.getElementById('advanced-toggle').textContent = open ? '− advanced' : '+ advanced';
+  saveSliders();
+}
 
 // Dual-range slider for period
 (function initDualRange() {
@@ -1453,6 +1638,14 @@ function shareConfig() {
   daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY);
   quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy]);
   monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy]);
+  dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
+  envelopeShiftCount = computeMaxShift();
+  shiftedQuarterlyCache = [];
+  for (let s = 1; s <= envelopeShiftCount; s++) {
+    shiftedQuarterlyCache.push(getShiftedQuarterly(s));
+  }
+  document.getElementById('envelope-note').textContent =
+    `Each ghost line is the same 9sig run with rebalance shifted N trading days earlier (1–${envelopeShiftCount}).`;
   const maxQIdx = quarterlyData.length - 1;
   document.getElementById('slider-exit').value = maxQIdx;
   window._dualRange.setMax(maxQIdx);
@@ -1467,15 +1660,28 @@ function shareConfig() {
   if (!hasUrlParams) {
     try {
       const saved = JSON.parse(localStorage.getItem(LS_KEY));
-      if (saved) SLIDER_IDS.forEach(id => { if (saved[id] != null) document.getElementById(id).value = saved[id]; });
+      if (saved) {
+        SLIDER_IDS.forEach(id => { if (saved[id] != null) document.getElementById(id).value = saved[id]; });
+        if (saved['toggle-envelope'] != null) document.getElementById('toggle-envelope').checked = !!saved['toggle-envelope'];
+        if (saved['toggle-bh-envelope'] != null) document.getElementById('toggle-bh-envelope').checked = !!saved['toggle-bh-envelope'];
+        const advancedSaved = saved['advanced-open'];
+        const wantOpen = advancedSaved === true
+          || (advancedSaved == null && (
+                saved['toggle-envelope'] === true
+                || saved['toggle-bh-envelope'] === true
+                || +saved['slider-raise'] > 0
+                || (saved['slider-rate'] != null && +saved['slider-rate'] !== 4)
+              ));
+        if (wantOpen) {
+          document.getElementById('advanced-section').classList.add('open');
+          document.getElementById('advanced-toggle').textContent = '− advanced';
+        }
+      }
     } catch(e) {}
   }
+  document.getElementById('disp-envelope-opacity').textContent =
+    'opacity ' + (+document.getElementById('slider-envelope-opacity').value / 100).toFixed(2);
   window._dualRange.updateUI();
-  // Auto-open raise section if non-zero value was restored
-  if (+document.getElementById('slider-raise').value > 0) {
-    document.getElementById('raise-section').classList.add('open');
-    document.getElementById('raise-toggle').textContent = 'less';
-  }
   render();
 })();
 </script>
