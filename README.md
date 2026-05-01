@@ -19,9 +19,9 @@ python3 -m venv .venv
 
 The script pulls `period="max"` with `auto_adjust=True` so every series is dividend- and split-adjusted on the same basis — comparisons between them remain fair. Output files:
 
-- `data/simulation_tqqq_qqq - qqq.tsv` (QQQ, 1999–present)
-- `data/simulation_tqqq_qqq - tqqq.tsv` (real TQQQ, 2010–present; pre-2010 is synthesized in the browser from QQQ returns)
-- `data/simulation_tqqq_qqq - spy.tsv` (SPY, 1993–present)
+- `data/synthetic-qqq.tsv` (QQQ, 1999–present; pre-1999 synthesized from `^NDX`)
+- `data/synthetic-tqqq.tsv` (real TQQQ, 2010–present; pre-2010 synthesized via derived NDX-TR and `^NDX`)
+- `data/spy.tsv` (SPY, 1993–present; pre-1993 synthesized from `^SP500TR` / `^GSPC`)
 
 ## Automated daily refresh
 

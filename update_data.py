@@ -68,9 +68,9 @@ SPY_EXPENSE_DAILY  = 0.000945 / 252  # 0.0945% annual
 DATA_DIR = 'data'
 
 tickers = [
-    ('QQQ',  'simulation_tqqq_qqq - qqq.tsv'),
-    ('TQQQ', 'simulation_tqqq_qqq - tqqq.tsv'),
-    ('SPY',  'simulation_tqqq_qqq - spy.tsv'),
+    ('QQQ',  'synthetic-qqq.tsv'),
+    ('TQQQ', 'synthetic-tqqq.tsv'),
+    ('SPY',  'spy.tsv'),
 ]
 
 
