@@ -9,14 +9,24 @@ expense formula. There is NO yearly-rate smoothing or dividend top-up — every
 synthesized close comes from a real daily index move and the same formula
 that approximates the ETF mechanics.
 
-Sources used (all from yfinance, all daily):
+Sources used (daily):
 
-  QQQ  pre-1999       ← ^NDX                       (1× − QQQ expense)
-  TQQQ pre-1999       ← ^NDX                       (3× − TQQQ expense)
-  TQQQ 1999 → 2010    ← derived NDX-TR             (3× − TQQQ expense)
+  ^NDX  base series   ← local ^ndx_d.csv (Stooq, back to 1938-01-03)
+                          merged with yfinance ^NDX from 1985-10-01 (overrides
+                          the CSV on overlapping dates)
+  ^GSPC, ^SP500TR, QQQ, TQQQ, SPY, QQQ-raw  ← yfinance
+
+  QQQ  pre-1999       ← extended ^NDX                (1× − QQQ expense)
+  TQQQ pre-1999       ← extended ^NDX                (3× − TQQQ expense)
+  TQQQ 1999 → 2010    ← derived NDX-TR               (3× − TQQQ expense)
                         = ^NDX × QQQ_adj / QQQ_raw
-  SPY  pre-1988       ← ^GSPC, clipped to NDX      (1× − SPY expense)
-  SPY  1988 → 1993    ← ^SP500TR                   (1× − SPY expense)
+  SPY  pre-1988       ← ^GSPC, clipped to NDX start  (1× − SPY expense)
+  SPY  1988 → 1993    ← ^SP500TR                     (1× − SPY expense)
+
+The local ^ndx_d.csv extends pre-1985 history. The actual NASDAQ-100 index
+didn't exist before 1985-01-31, so values before that are a back-reconstruction
+by the data provider. Treat pre-1985 synth QQQ/TQQQ as "what would have been"
+not "what was".
 
 The "derived NDX-TR" trick: real QQQ_adj returns ≈ NDX-TR − QQQ_exp; real
 QQQ_raw (split-adjusted only, no dividend reinvestment) returns ≈ NDX − QQQ_exp.
@@ -66,9 +76,59 @@ def cell(value):
     return float(value.iloc[0]) if hasattr(value, 'iloc') else float(value)
 
 
+def normalize_ts(ts):
+    """Snap a pandas Timestamp to tz-naive midnight so dates from yfinance
+    (tz-aware) match dates from the local CSV (tz-naive)."""
+    import pandas as pd
+    if hasattr(ts, 'tz') and ts.tz is not None:
+        ts = ts.tz_localize(None)
+    return pd.Timestamp(ts.year, ts.month, ts.day)
+
+
 def df_to_pairs(df):
-    """yfinance DataFrame -> list of (Timestamp, close), chronological."""
-    return [(date, cell(row['Close'])) for date, row in df.iterrows()]
+    """yfinance DataFrame -> list of (tz-naive Timestamp, close), chronological."""
+    return [(normalize_ts(date), cell(row['Close'])) for date, row in df.iterrows()]
+
+
+def read_ndx_csv():
+    """Read local ^ndx_d.csv (Stooq-style: Date,Open,High,Low,Close,Volume).
+    Returns [(tz-naive Timestamp, close)] sorted by date."""
+    import pandas as pd
+    csv_path = os.path.join(basedir, '^ndx_d.csv')
+    if not os.path.exists(csv_path):
+        return []
+    pairs = []
+    with open(csv_path) as f:
+        next(f)
+        for line in f:
+            parts = line.strip().split(',')
+            if len(parts) < 5:
+                continue
+            try:
+                pairs.append((pd.Timestamp(parts[0]), float(parts[4])))
+            except (ValueError, TypeError):
+                continue
+    pairs.sort(key=lambda x: x[0])
+    return pairs
+
+
+def extend_with_csv(yf_pairs, csv_pairs):
+    """Use yfinance values wherever they exist; fall back to CSV for older
+    dates that yfinance doesn't cover."""
+    yf_map = dict(yf_pairs)
+    yf_first = min(yf_map.keys()) if yf_map else None
+    if yf_first is None:
+        return csv_pairs
+    pre = [(d, c) for d, c in csv_pairs if d < yf_first]
+    return pre + sorted(yf_map.items())
+
+
+def fmt_close(value):
+    """12 significant figures, general format. Preserves precision for the
+    very small values that show up at the start of long backward synthesis
+    chains (e.g., TQQQ 1938 ≈ 1e-9). Falls back to scientific notation when
+    fixed decimals would lose information."""
+    return f'{value:.12g}'
 
 
 def walk_backward(source_pairs, anchor_date, anchor_price, leverage, expense_daily):
@@ -113,10 +173,10 @@ ndx_df          = fetch('^NDX')
 gspc_df         = fetch('^GSPC')
 sp500tr_df      = fetch('^SP500TR')
 
-ndx_pairs       = df_to_pairs(ndx_df)
+ndx_pairs       = extend_with_csv(df_to_pairs(ndx_df), read_ndx_csv())
 qqq_pairs       = df_to_pairs(qqq_df)                       # = QQQ_adj
 sp500tr_pairs   = df_to_pairs(sp500tr_df)
-ndx_start       = ndx_df.index[0]
+ndx_start       = ndx_pairs[0][0] if ndx_pairs else df_to_pairs(ndx_df)[0][0]
 gspc_clipped    = [(d, c) for d, c in df_to_pairs(gspc_df) if d >= ndx_start]
 
 # Build derived NDX-TR pairs: ^NDX × QQQ_adj / QQQ_raw, only for dates where
@@ -192,16 +252,15 @@ real_by_ticker   = {'QQQ': qqq_df, 'TQQQ': tqqq_df, 'SPY': spy_df}
 for ticker, filename in tickers:
     data = real_by_ticker[ticker]
     prefix_rows = prefix_by_ticker.get(ticker, [])
-    decimals = 4 if ticker == 'TQQQ' else 2
     path = os.path.join(basedir, filename)
 
     with open(path, 'w') as f:
         f.write('Date\tClose\n')
         for date_str, close in prefix_rows:
-            f.write(f'{date_str}\t{round(close, decimals)}\n')
+            f.write(f'{date_str}\t{fmt_close(close)}\n')
         for date, row in data.iterrows():
             date_str = date.strftime('%-m/%-d/%Y 16:00:00')
-            f.write(f'{date_str}\t{round(cell(row["Close"]), decimals)}\n')
+            f.write(f'{date_str}\t{fmt_close(cell(row["Close"]))}\n')
 
     if prefix_rows:
         first = prefix_rows[0][0].split(' ')[0]

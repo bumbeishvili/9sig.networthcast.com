@@ -142,10 +142,21 @@
   }
 
   #advanced-section { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
-  #advanced-section.open { max-height: 600px; }
+  #advanced-section.open { max-height: 1000px; }
 
-  #advanced-toggle {
-    width: 100%;
+  #adaptive-section { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+  #adaptive-section.open { max-height: 280px; }
+
+  .section-toggle-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .section-toggle-row > button {
+    flex: 1;
+  }
+
+  #adaptive-toggle {
     background: none;
     border: 1px dashed var(--border);
     color: var(--text-muted);
@@ -155,7 +166,49 @@
     padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
-    margin-bottom: 18px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  #adaptive-toggle:hover {
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+
+  .adaptive-line {
+    font-size: 12px;
+    line-height: 1.9;
+    color: var(--text-muted);
+    margin: 2px 0;
+  }
+  .adaptive-line strong {
+    color: var(--accent2);
+    font-weight: 600;
+  }
+  .inline-select {
+    background: var(--surface2);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 4px 2px 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    margin: 0 2px;
+    transition: border-color 0.15s;
+  }
+  .inline-select:hover { border-color: var(--accent); }
+  .inline-select:focus { outline: none; border-color: var(--accent); }
+
+  #advanced-toggle {
+    background: none;
+    border: 1px dashed var(--border);
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
     transition: border-color 0.15s, color 0.15s;
   }
   #advanced-toggle:hover {
@@ -466,24 +519,6 @@
 
 <div class="layout">
   <div class="panel">
-    <h2>Period</h2>
-
-    <div class="control-group">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <div><label>Entry Quarter</label><div class="value-display period" id="disp-entry">Q1 1999</div></div>
-        <div style="text-align:right"><label>Exit Quarter</label><div class="value-display period" id="disp-exit">Q1 2026</div></div>
-      </div>
-      <div class="dual-range" id="period-range">
-        <div class="track"></div>
-        <div class="fill"></div>
-        <div class="thumb" data-handle="entry"></div>
-        <div class="thumb" data-handle="exit"></div>
-      </div>
-      <input type="hidden" id="slider-entry" value="0">
-      <input type="hidden" id="slider-exit" value="108">
-    </div>
-
-    <div class="divider"></div>
     <h2>Parameters</h2>
 
     <div class="control-group">
@@ -498,7 +533,27 @@
       <input type="range" id="slider-monthly" min="0" max="100000" step="50" value="500">
     </div>
 
-    <button id="advanced-toggle" onclick="toggleAdvanced()">+ advanced</button>
+    <div class="section-toggle-row">
+      <button id="advanced-toggle" onclick="toggleAdvanced()">+ advanced</button>
+      <button id="adaptive-toggle" onclick="toggleAdaptive()">+ adaptive strategy</button>
+    </div>
+
+    <div id="adaptive-section">
+      <div class="control-group">
+        <div class="adaptive-line">
+          Switch to <strong>9sig</strong> when TQQQ is
+          <select class="inline-select" id="select-tqqq-above"></select>× as much as 9sig
+        </div>
+        <div class="adaptive-line">
+          Switch to <strong>all-in TQQQ</strong> when 9sig is
+          <select class="inline-select" id="select-tqqq-below"></select>× as much as TQQQ
+        </div>
+        <div class="adaptive-line">
+          measured over the last
+          <select class="inline-select" id="select-tqqq-window"></select> year period
+        </div>
+      </div>
+    </div>
 
     <div id="advanced-section">
       <div class="control-group">
@@ -511,6 +566,13 @@
         <label>Cash Interest Rate (Annual)</label>
         <div class="value-display" id="disp-rate">4.0%</div>
         <input type="range" id="slider-rate" min="0" max="15" step="0.25" value="4">
+      </div>
+
+      <div class="control-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
+          <input type="checkbox" id="toggle-log-scale" style="cursor:pointer;accent-color:var(--accent)">
+          <span style="color:var(--text);font-size:12px">Logarithmic Y-axis</span>
+        </label>
       </div>
 
       <div class="control-group">
@@ -555,6 +617,21 @@
         <canvas id="mainChart"></canvas>
       </div>
       <div id="custom-tooltip"></div>
+
+      <div class="control-group" style="margin-top:18px;margin-bottom:0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div><label>Entry Quarter</label><div class="value-display period" id="disp-entry">Q1 1999</div></div>
+          <div style="text-align:right"><label>Exit Quarter</label><div class="value-display period" id="disp-exit">Q1 2026</div></div>
+        </div>
+        <div class="dual-range" id="period-range">
+          <div class="track"></div>
+          <div class="fill"></div>
+          <div class="thumb" data-handle="entry"></div>
+          <div class="thumb" data-handle="exit"></div>
+        </div>
+        <input type="hidden" id="slider-entry" value="0">
+        <input type="hidden" id="slider-exit" value="108">
+      </div>
     </div>
 
     <div class="panel">
@@ -745,6 +822,86 @@ function fmtFull(n) {
   return fmt(n);
 }
 
+// Pre-render small letter-badge canvases for the Adaptive transition markers:
+// "9" on a cyan circle when switching to 9sig, "T" on a red circle when
+// switching to all-in TQQQ. Chart.js accepts a HTMLCanvasElement as pointStyle.
+function makeLetterBadge(letter, color) {
+  const dpr = window.devicePixelRatio || 1;
+  const size = 22;
+  const c = document.createElement('canvas');
+  c.width = size * dpr;
+  c.height = size * dpr;
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  // filled circle background
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+  ctx.fill();
+  // letter on top — chart-bg color for contrast
+  ctx.fillStyle = '#0a0e17';
+  ctx.font = 'bold 13px "DM Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(letter, size / 2, size / 2 + 1);
+  return c;
+}
+const switchIcon9sig = makeLetterBadge('9', '#22d3ee');
+const switchIconTqqq = makeLetterBadge('T', '#f87171');
+
+// Compute trailing "$1 invested N years ago" B&H-TQQQ ÷ simplified-9sig ratio (×100)
+// at the given index in quarterlyData. Returns null if there isn't enough history.
+function trailingShadowRatio(globalIdx, yearsBack) {
+  const back = yearsBack * 4;
+  if (globalIdx < back) return null;
+  const start = globalIdx - back;
+  const startPrice = quarterlyData[start][1];
+  const endPrice = quarterlyData[globalIdx][1];
+  if (!startPrice || !endPrice) return null;
+  const bhValue = endPrice / startPrice;
+
+  let cash = 0.3;
+  let shares = 0.7 / startPrice;
+  let signal = 0.7;
+  for (let t = start + 1; t <= globalIdx; t++) {
+    const p = quarterlyData[t][1];
+    signal *= 1.09;
+    const tqqqVal = shares * p;
+    const diff = tqqqVal - signal;
+    if (diff > 0) {
+      shares -= diff / p;
+      cash += diff;
+    } else if (diff < 0 && cash > 0) {
+      const buy = Math.min(-diff, cash * 0.9);
+      shares += buy / p;
+      cash -= buy;
+    }
+    const newVal = shares * p;
+    if (newVal < signal) signal = newVal;
+  }
+  const sigValue = shares * endPrice + cash;
+  if (sigValue <= 0) return null;
+  return (bhValue / sigValue) * 100;
+}
+
+// Calendar-anchored adaptive state machine — runs from quarterlyData[0] forward
+// regardless of the user's entry/exit, so the strategy at any given calendar
+// quarter is deterministic (depends only on the threshold sliders, not on the
+// simulation window). Returns ['all-in' | '9sig'] aligned to quarterlyData.
+function computeAdaptiveStates(switchTo9sigPct, switchToAllInPct, yearsBack) {
+  const states = new Array(quarterlyData.length);
+  let state = 'all-in';
+  for (let i = 0; i < quarterlyData.length; i++) {
+    const ratio = trailingShadowRatio(i, yearsBack);
+    if (ratio != null) {
+      if (state === 'all-in' && ratio >= switchTo9sigPct) state = '9sig';
+      else if (state === '9sig' && ratio <= switchToAllInPct) state = 'all-in';
+    }
+    states[i] = state;
+  }
+  return states;
+}
+
 function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, opts) {
   const monthlyRate = annualRate / 12;
   const qGrowth = 0.09; // 9% quarterly signal line growth
@@ -752,6 +909,9 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   opts = opts || {};
   const qData = opts.qData || quarterlyData;
   const skipBH = !!opts.skipBH;
+  const switchTo9sig  = opts.switchTo9sig  != null ? opts.switchTo9sig  : 200;
+  const switchToAllIn = opts.switchToAllIn != null ? opts.switchToAllIn : 100;
+  const yearsBack     = opts.yearsBack     != null ? opts.yearsBack     : 10;
 
   const qSlice = qData.slice(entryIdx, exitIdx + 1);
   if (qSlice.length < 2) return { log: [], bhPoints: [], qqqPoints: [], totalContributed: initial };
@@ -922,7 +1082,101 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
     spyPrevQ = qDate;
   }
 
-  return { log, bhPoints, qqqPoints, spyPoints, totalContributed: totalInvested };
+  // Adaptive: state machine is calendar-anchored — determined by trailing-10y
+  // ratio of $1-invested-10y-ago B&H TQQQ vs simplified 9sig, evaluated against
+  // the global timeline. So entering at 1995 vs 2010 doesn't change *when* the
+  // strategy switches — only what portfolio you've accumulated by then.
+  const adaptiveStates = computeAdaptiveStates(switchTo9sig, switchToAllIn, yearsBack);
+  let aState = adaptiveStates[entryIdx];
+  let aCash, aShares, aSignal;
+  if (aState === '9sig') {
+    aCash   = initial * 0.3;
+    aShares = (initial * 0.7) / qSlice[0][1];
+    aSignal = initial * 0.7;
+  } else {
+    aCash   = 0;
+    aShares = initial / qSlice[0][1];
+    aSignal = 0;
+  }
+  let aPrevQ = qSlice[0][0];
+  let aCrashCount = 0;  // mirror of main 9sig's crashNoSellCount for the 30-down rule
+  const adaptivePoints = [];
+
+  for (let qi = 0; qi < qSlice.length; qi++) {
+    const [qDate, qPrice] = qSlice[qi];
+    let aNewCashThisQ = 0;
+    if (qi > 0) {
+      const yr = parseInt(qDate.substring(0, 4));
+      const aMonthly = monthly * Math.pow(1 + annualRaise, yr - startYear);
+      for (const [mDate, mPrice] of monthlyData) {
+        if (mDate > aPrevQ && mDate <= qDate) {
+          if (aState === 'all-in') {
+            aShares += aMonthly / mPrice;
+          } else {
+            aCash += aMonthly;
+            aCash *= (1 + monthlyRate);
+            aNewCashThisQ += aMonthly;
+          }
+        }
+      }
+
+      const newState = adaptiveStates[entryIdx + qi];
+      if (newState !== aState) {
+        if (newState === '9sig') {
+          const tv = aShares * qPrice;
+          aCash = tv * 0.3;
+          aShares = (tv * 0.7) / qPrice;
+          aSignal = tv * 0.7;
+        } else {
+          aShares += aCash / qPrice;
+          aCash = 0;
+          aSignal = 0;
+        }
+        aCrashCount = 0;
+        aState = newState;
+      }
+
+      if (aState === '9sig') {
+        aSignal = aSignal * (1 + qGrowth) + aNewCashThisQ * 0.5;
+        const tv = aShares * qPrice;
+        const diff = tv - aSignal;
+
+        // 30-down no-sell rule — same as main 9sig leg
+        const twoYearsAgoA = (parseInt(qDate.substring(0, 4)) - 2) + qDate.substring(4);
+        let peak2yA = qPrice;
+        for (let k = qi; k >= 0; k--) {
+          if (qSlice[k][0] < twoYearsAgoA) break;
+          if (qSlice[k][1] > peak2yA) peak2yA = qSlice[k][1];
+        }
+        const inCrashZoneA = qPrice < peak2yA * 0.7;
+
+        if (diff > 0 && !inCrashZoneA) {
+          aShares -= diff / qPrice;
+          aCash += diff;
+          aCrashCount = 0;
+        } else if (diff > 0 && inCrashZoneA && aCrashCount < 2) {
+          aCrashCount++;
+        } else if (diff > 0 && inCrashZoneA && aCrashCount >= 2) {
+          aShares -= diff / qPrice;
+          aCash += diff;
+          aCrashCount = 0;
+        } else if (diff < 0 && aCash > 0) {
+          aCrashCount = 0;
+          const buy = Math.min(-diff, aCash * 0.9);
+          aShares += buy / qPrice;
+          aCash -= buy;
+        } else {
+          aCrashCount = 0;
+        }
+        const ntv = aShares * qPrice;
+        if (ntv < aSignal) aSignal = ntv;
+      }
+    }
+    adaptivePoints.push({ date: qDate, value: aShares * qPrice + aCash, state: aState });
+    aPrevQ = qDate;
+  }
+
+  return { log, bhPoints, qqqPoints, spyPoints, adaptivePoints, totalContributed: totalInvested };
 }
 
 let chart = null;
@@ -933,6 +1187,15 @@ function render() {
   const monthly = +document.getElementById('slider-monthly').value;
   const annualRaise = +document.getElementById('slider-raise').value / 100;
   const rate = +document.getElementById('slider-rate').value / 100;
+  const logScale = document.getElementById('toggle-log-scale').checked;
+  const tqqqAboveMult = +document.getElementById('select-tqqq-above').value;  // e.g. 2.0× = TQQQ is 2× of 9sig
+  const tqqqBelowMult = +document.getElementById('select-tqqq-below').value;  // e.g. 1.2× = 9sig is 1.2× of TQQQ
+  const tqqqWindow    = +document.getElementById('select-tqqq-window').value;
+  // Translate to the internal trailing-window ratio (B&H_TQQQ / 9sig × 100).
+  // Ratio 100% = parity. Switch to 9sig when ratio ≥ above_mult × 100.
+  // Switch to all-in when 1/ratio ≥ below_mult, i.e. ratio ≤ 100 / below_mult.
+  const switchTo9sig  = tqqqAboveMult * 100;
+  const switchToAllIn = tqqqBelowMult > 0 ? 100 / tqqqBelowMult : 100;
   let entryIdx = +document.getElementById('slider-entry').value;
   let exitIdx = +document.getElementById('slider-exit').value;
 
@@ -959,7 +1222,7 @@ function render() {
   document.getElementById('disp-entry').textContent = qLabel(quarterlyData[entryIdx][0]);
   document.getElementById('disp-exit').textContent = qLabel(quarterlyData[exitIdx][0]);
 
-  const { log, bhPoints, qqqPoints, spyPoints, totalContributed } = simulate(initial, monthly, rate, entryIdx, exitIdx, annualRaise);
+  const { log, bhPoints, qqqPoints, spyPoints, adaptivePoints, totalContributed } = simulate(initial, monthly, rate, entryIdx, exitIdx, annualRaise, { switchTo9sig, switchToAllIn, yearsBack: tqqqWindow });
 
   const showEnvelope = document.getElementById('toggle-envelope').checked;
   const showBhEnvelope = document.getElementById('toggle-bh-envelope').checked;
@@ -987,48 +1250,34 @@ function render() {
   const finalSPY = spyPoints[spyPoints.length - 1].value;
   const years = log.length > 1 ? (new Date(log[log.length-1].date) - new Date(log[0].date)) / (365.25*86400000) : 1;
   const cagr = (end, start) => years > 0 && start > 0 ? (Math.pow(end / start, 1 / years) - 1) * 100 : 0;
+  const finalAdaptive = adaptivePoints[adaptivePoints.length - 1].value;
   const ret9 = cagr(finalLog.total, totalContributed);
   const retBH = cagr(finalBH, totalContributed);
   const retQQQ = cagr(finalQQQ, totalContributed);
   const retSPY = cagr(finalSPY, totalContributed);
   const retInv = cagr(finalLog.investedCompounded, totalContributed);
+  const retAdaptive = cagr(finalAdaptive, totalContributed);
 
   document.getElementById('stats-grid').innerHTML = `
-    <div class="stat-card">
-      <div class="stat-label">9sig Final</div>
-      <div class="stat-value neutral">${fmtFull(finalLog.total)}</div>
-    </div>
     <div class="stat-card">
       <div class="stat-label">9sig Annualized</div>
       <div class="stat-value ${ret9 >= 0 ? 'positive' : 'negative'}">${ret9 >= 0 ? '+' : ''}${ret9.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">B&H TQQQ</div>
-      <div class="stat-value" style="color:var(--red)">${fmtFull(finalBH)}</div>
+      <div class="stat-label">Adaptive Annualized</div>
+      <div class="stat-value ${retAdaptive >= 0 ? 'positive' : 'negative'}">${retAdaptive >= 0 ? '+' : ''}${retAdaptive.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">B&H TQQQ Annualized</div>
       <div class="stat-value ${retBH >= 0 ? 'positive' : 'negative'}">${retBH >= 0 ? '+' : ''}${retBH.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">B&H QQQ</div>
-      <div class="stat-value" style="color:#4ade80">${fmtFull(finalQQQ)}</div>
-    </div>
-    <div class="stat-card">
       <div class="stat-label">B&H QQQ Annualized</div>
       <div class="stat-value ${retQQQ >= 0 ? 'positive' : 'negative'}">${retQQQ >= 0 ? '+' : ''}${retQQQ.toFixed(1)}%</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">B&H SPY</div>
-      <div class="stat-value" style="color:#f472b6">${fmtFull(finalSPY)}</div>
-    </div>
-    <div class="stat-card">
       <div class="stat-label">B&H SPY Annualized</div>
       <div class="stat-value ${retSPY >= 0 ? 'positive' : 'negative'}">${retSPY >= 0 ? '+' : ''}${retSPY.toFixed(1)}%</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Invested Compounded</div>
-      <div class="stat-value" style="color:var(--text)">${fmtFull(finalLog.investedCompounded)}</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Invested Compounded Annualized</div>
@@ -1046,6 +1295,20 @@ function render() {
   const spyD = spyPoints.map(s => s.value);
   const invD = log.map(l => l.investedCompounded);
   const targetD = log.map(l => l.target);
+  const adaptiveD = adaptivePoints.map(a => a.value);
+  // Transition markers: dot at every quarter the strategy switched. Cyan for
+  // → 9sig, red for → all-in TQQQ, transparent (radius 0) on non-switch quarters.
+  // The plugin draws connector + label; keep pointRadius 0 so we don't
+  // double-up. Transition dot is rendered by the plugin itself for full
+  // control over size/color/layering.
+  const adaptivePointRadius = adaptivePoints.map(() => 0);
+  const adaptivePointHoverRadius = adaptivePoints.map(() => 0);
+  const adaptivePointBg = adaptivePoints.map(a => a.state === '9sig' ? '#22d3ee' : '#f87171');
+  const adaptiveTransitions = adaptivePoints.map((a, i) => {
+    if (i === 0) return a.state === '9sig' ? 'starts 9sig' : 'starts TQQQ';
+    if (a.state === adaptivePoints[i-1].state) return null;
+    return a.state === '9sig' ? 'to 9sig' : 'to TQQQ';
+  });
 
   if (chart) {
     chart.data.labels = labels;
@@ -1057,8 +1320,14 @@ function render() {
     chart.data.datasets[5].data = targetD;
     chart.data.datasets[6].data = cashD;
     chart.data.datasets[7].data = invD;
-    while (chart.data.datasets.length < 8 + envelopeShiftCount * 2) {
-      const offset = chart.data.datasets.length - 8;
+    chart.data.datasets[8].data = adaptiveD;
+    chart.data.datasets[8].pointRadius = adaptivePointRadius;
+    chart.data.datasets[8].pointHoverRadius = adaptivePointHoverRadius;
+    chart.data.datasets[8].pointBackgroundColor = adaptivePointBg;
+    chart.data.datasets[8].pointBorderColor = adaptivePointBg;
+    chart.data.datasets[8]._transitions = adaptiveTransitions;
+    while (chart.data.datasets.length < 9 + envelopeShiftCount * 2) {
+      const offset = chart.data.datasets.length - 9;
       const isBh = offset >= envelopeShiftCount;
       chart.data.datasets.push({
         label: (isBh ? '_bhshift_' : '_shift_') + ((offset % envelopeShiftCount) + 1),
@@ -1075,23 +1344,25 @@ function render() {
       });
     }
     for (let i = 0; i < envelopeShiftCount; i++) {
-      const ds9 = chart.data.datasets[8 + i];
+      const ds9 = chart.data.datasets[9 + i];
       ds9.data = showEnvelope ? (shiftResults[i] || []) : [];
       ds9.borderColor = envColor;
       ds9.hidden = !showEnvelope;
-      const dsB = chart.data.datasets[8 + envelopeShiftCount + i];
+      const dsB = chart.data.datasets[9 + envelopeShiftCount + i];
       dsB.data = showBhEnvelope ? (bhShiftResults[i] || []) : [];
       dsB.borderColor = envColorBh;
       dsB.hidden = !showBhEnvelope;
     }
+    chart.options.scales.y.type = logScale ? 'logarithmic' : 'linear';
+    chart.options.scales.y.beginAtZero = !logScale;
     chart.update('none');
   } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
-  const lineColors = ['#22d3ee', '#38bdf8', '#f87171', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
-  const lineNames  = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', 'B&H SPY', '9sig TQQQ Target', '9sig Cash', 'Invested Comp.'];
+  const lineColors = ['#22d3ee', '#38bdf8', '#f87171', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)', '#c084fc'];
+  const lineNames  = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', 'B&H SPY', '9sig TQQQ Target', '9sig Cash', 'Invested Comp.', 'Adaptive'];
   // Match the borderDash on the corresponding chart dataset; null = solid.
-  const lineDashes = [null, [2,2], [6,3], [8,4], [6,3], [4,4], null, [3,3]];
+  const lineDashes = [null, [2,2], [6,3], [8,4], [6,3], [4,4], null, [3,3], null];
 
   const externalTooltip = (context) => {
     const { chart: c, tooltip } = context;
@@ -1103,7 +1374,7 @@ function render() {
 
     const ds = c.data.datasets;
     const date = c.data.labels[idx];
-    const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx], ds[6].data[idx], ds[7].data[idx]];
+    const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx], ds[6].data[idx], ds[7].data[idx], ds[8].data[idx]];
 
     const rgba = (col, a) => {
       if (col.startsWith('rgba')) return col.replace(/,\s*[\d.]+\s*\)$/, `,${a})`);
@@ -1119,18 +1390,22 @@ function render() {
       .sort((a, b) => b.v - a.v);
     const maxV = Math.max(0, ...items.map(it => it.v));
 
+    const adaptiveTrans = (ds[8] && ds[8]._transitions) ? ds[8]._transitions[idx] : null;
     const rows = items.map(({ i, n, v }) => {
       const pct = maxV > 0 ? Math.max(0, (v / maxV) * 100) : 0;
       const dashAttr = lineDashes[i] ? `stroke-dasharray="${lineDashes[i].join(',')}"` : '';
       const sample = `<svg width="20" height="4" style="flex-shrink:0;overflow:visible">
         <line x1="0" y1="2" x2="20" y2="2" stroke="${lineColors[i]}" stroke-width="2" stroke-linecap="round" ${dashAttr}/>
       </svg>`;
+      const transBadge = (i === 8 && adaptiveTrans)
+        ? `<span style="margin-left:6px;font-size:10px;color:${adaptiveTrans.includes('9sig') ? '#22d3ee' : '#f87171'};font-weight:600">${adaptiveTrans}</span>`
+        : '';
       return `
         <div class="tt-row" style="position:relative">
           <div style="position:absolute;left:0;top:2px;bottom:2px;width:${pct}%;background:${rgba(lineColors[i], 0.20)};border-radius:3px;pointer-events:none"></div>
           <div class="tt-row-left" style="position:relative;z-index:1">
             ${sample}
-            <span class="tt-name">${n}</span>
+            <span class="tt-name">${n}</span>${transBadge}
           </div>
           <span class="tt-val" style="position:relative;z-index:1">${fmtFull(Math.round(v))}</span>
         </div>
@@ -1227,9 +1502,142 @@ function render() {
     }
   };
 
+  // d3-style callout annotations on the Adaptive line for each strategy switch.
+  // For each transition: dashed-circle marker at the data point, diagonal
+  // connector, horizontal underline, then bold "to 9sig" / "to TQQQ" text
+  // sitting on the underline. Label is placed via Voronoi-style search:
+  // gather y-coords of every visible line at the same x-index, try increasing
+  // offset distances along a 45° diagonal in the preferred direction, fall
+  // back to the opposite direction if everything is occluded. Tracks
+  // previously-placed label rects so back-to-back transitions don't pile up.
+  const adaptiveAnnotationPlugin = {
+    id: 'adaptiveAnnotations',
+    afterDatasetsDraw(c) {
+      const adaptiveIdx = 8;
+      if (!c.isDatasetVisible(adaptiveIdx)) return;
+      const ds = c.data.datasets[adaptiveIdx];
+      const transitions = ds && ds._transitions;
+      if (!transitions) return;
+      const meta = c.getDatasetMeta(adaptiveIdx);
+      const cx = c.ctx;
+      const top = c.chartArea.top;
+      const bottom = c.chartArea.bottom;
+      const right = c.chartArea.right;
+
+      const labelHeight  = 14;
+      const dotR         = 5;
+      const distancesAsc = [32, 44, 58, 74, 92, 112, 134, 160];
+      const placed       = [];
+
+      cx.save();
+      transitions.forEach((trans, i) => {
+        if (!trans) return;
+        const pt = meta.data[i];
+        if (!pt) return;
+        const isToSig = trans.includes('9sig');
+        const color = isToSig ? '#22d3ee' : '#f87171';
+        const titleText = trans;            // e.g. "to 9sig", "to TQQQ", "starts 9sig"
+        const preferDir = isToSig ? -1 : 1; // 9sig above, TQQQ below
+        // Measure text width once so the placement search uses the actual label rect
+        cx.font = 'bold 10px "DM Sans", sans-serif';
+        const labelWidth = Math.ceil(cx.measureText(titleText).width) + 10;
+
+        // y-coords of every other visible line at this x-index
+        const otherYs = [];
+        c.data.datasets.forEach((d, idx) => {
+          if (idx === adaptiveIdx || !c.isDatasetVisible(idx)) return;
+          const m = c.getDatasetMeta(idx);
+          const p = m && m.data[i];
+          if (p) otherYs.push(p.y);
+        });
+
+        // 45° diagonal: dx = dy at any chosen distance. Try both signs.
+        const dirsTry = [preferDir, -preferDir];
+        let chosenDx = 0, chosenDy = 0, chosenRect = null;
+
+        outer: for (const dist of distancesAsc) {
+          for (const dirSign of dirsTry) {
+            const dx = dist;
+            const dy = dirSign * dist;
+            const ax = pt.x + dx;             // anchor (kink between diagonal and underline)
+            const ay = pt.y + dy;
+            // Label rect: text sits ABOVE the underline regardless of direction
+            const lTop = ay - labelHeight - 2;
+            const lBot = ay + 2;
+            const lLeft = ax;
+            const lRight = ax + labelWidth;
+            if (lTop < top + 2 || lBot > bottom - 2) continue;
+            if (lRight > right - 2) continue;
+            // overlap with any visible line at this x?
+            let crossesLine = false;
+            for (const oy of otherYs) {
+              if (oy >= lTop - 2 && oy <= lBot + 2) { crossesLine = true; break; }
+            }
+            if (crossesLine) continue;
+            // overlap with a previously placed label rect?
+            let labelClash = false;
+            for (const p of placed) {
+              if (lLeft < p.x2 && lRight > p.x1 && lTop < p.y2 && lBot > p.y1) {
+                labelClash = true; break;
+              }
+            }
+            if (labelClash) continue;
+            chosenDx = dx; chosenDy = dy;
+            chosenRect = { x1: lLeft, y1: lTop, x2: lRight, y2: lBot };
+            break outer;
+          }
+        }
+        if (!chosenRect) {
+          // fallback: smallest offset in preferred direction
+          chosenDx = distancesAsc[0];
+          chosenDy = preferDir * distancesAsc[0];
+        } else {
+          placed.push(chosenRect);
+        }
+
+        const ax = pt.x + chosenDx;
+        const ay = pt.y + chosenDy;
+
+        cx.strokeStyle = color;
+        cx.lineWidth = 1;
+
+        // dashed circle marker at the data point
+        cx.setLineDash([2, 2]);
+        cx.beginPath();
+        cx.arc(pt.x, pt.y, dotR, 0, Math.PI * 2);
+        cx.stroke();
+        cx.setLineDash([]);
+
+        // diagonal connector — start just outside the marker so it doesn't
+        // overlap the dashed circle
+        const ang = Math.atan2(chosenDy, chosenDx);
+        const startX = pt.x + (dotR + 1) * Math.cos(ang);
+        const startY = pt.y + (dotR + 1) * Math.sin(ang);
+        cx.beginPath();
+        cx.moveTo(startX, startY);
+        cx.lineTo(ax, ay);
+        cx.stroke();
+
+        // horizontal underline supporting the text
+        cx.beginPath();
+        cx.moveTo(ax, ay);
+        cx.lineTo(ax + labelWidth - 6, ay);
+        cx.stroke();
+
+        // bold text sitting on the underline
+        cx.fillStyle = color;
+        cx.font = 'bold 10px "DM Sans", sans-serif';
+        cx.textAlign = 'left';
+        cx.textBaseline = 'bottom';
+        cx.fillText(titleText, ax + 2, ay - 2);
+      });
+      cx.restore();
+    }
+  };
+
   chart = new Chart(ctx, {
     type: 'line',
-    plugins: [endLabelPlugin],
+    plugins: [endLabelPlugin, adaptiveAnnotationPlugin],
     data: {
       labels,
       datasets: [
@@ -1331,6 +1739,22 @@ function render() {
           borderWidth: 1.5,
           borderDash: [3, 3]
         },
+        {
+          label: 'Adaptive',
+          data: adaptiveD,
+          borderColor: '#c084fc',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.3,
+          pointRadius: adaptivePointRadius,
+          pointHoverRadius: adaptivePointHoverRadius,
+          pointBackgroundColor: adaptivePointBg,
+          pointBorderColor: adaptivePointBg,
+          pointHitRadius: 10,
+          borderWidth: 2,
+          order: 100,         // highest order in Chart.js → drawn LAST → on top of every other line
+          _transitions: adaptiveTransitions
+        },
         ...Array.from({ length: envelopeShiftCount }, (_, i) => ({
           label: '_shift_' + (i + 1),
           data: showEnvelope ? (shiftResults[i] || []) : [],
@@ -1400,7 +1824,8 @@ function render() {
           grid: { color: 'rgba(30,42,63,0.5)' }
         },
         y: {
-          beginAtZero: true,
+          type: logScale ? 'logarithmic' : 'linear',
+          beginAtZero: !logScale,
           ticks: {
             color: '#64748b',
             font: { family: 'JetBrains Mono', size: 10 },
@@ -1436,7 +1861,7 @@ function render() {
 
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','slider-envelope-opacity'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','slider-envelope-opacity','select-tqqq-above','select-tqqq-below','select-tqqq-window'];
 const LS_KEY = '9sig-sliders';
 
 function saveSliders() {
@@ -1444,13 +1869,18 @@ function saveSliders() {
   SLIDER_IDS.forEach(id => vals[id] = document.getElementById(id).value);
   vals['toggle-envelope'] = document.getElementById('toggle-envelope').checked;
   vals['toggle-bh-envelope'] = document.getElementById('toggle-bh-envelope').checked;
+  vals['toggle-log-scale'] = document.getElementById('toggle-log-scale').checked;
   vals['advanced-open'] = document.getElementById('advanced-section').classList.contains('open');
+  vals['adaptive-open'] = document.getElementById('adaptive-section').classList.contains('open');
   try { localStorage.setItem(LS_KEY, JSON.stringify(vals)); } catch(e) {}
 }
 
 // Regular sliders (not entry/exit — those are handled by dual-range)
 ['slider-initial','slider-monthly','slider-raise','slider-rate'].forEach(id => {
   document.getElementById(id).addEventListener('input', () => { saveSliders(); render(); });
+});
+['select-tqqq-above','select-tqqq-below','select-tqqq-window'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => { saveSliders(); render(); });
 });
 
 // Envelope opacity: just retint existing shift datasets, no re-simulation
@@ -1461,9 +1891,9 @@ document.getElementById('slider-envelope-opacity').addEventListener('input', () 
     const c9 = `rgba(34,211,238,${v})`;
     const cB = `rgba(248,113,113,${v})`;
     for (let i = 0; i < envelopeShiftCount; i++) {
-      const ds9 = chart.data.datasets[8 + i];
+      const ds9 = chart.data.datasets[9 + i];
       if (ds9) ds9.borderColor = c9;
-      const dsB = chart.data.datasets[8 + envelopeShiftCount + i];
+      const dsB = chart.data.datasets[9 + envelopeShiftCount + i];
       if (dsB) dsB.borderColor = cB;
     }
     chart.update('none');
@@ -1471,7 +1901,7 @@ document.getElementById('slider-envelope-opacity').addEventListener('input', () 
   saveSliders();
 });
 
-['toggle-envelope', 'toggle-bh-envelope'].forEach(id => {
+['toggle-envelope', 'toggle-bh-envelope', 'toggle-log-scale'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
     saveSliders();
     render();
@@ -1483,6 +1913,14 @@ function toggleAdvanced() {
   sec.classList.toggle('open');
   const open = sec.classList.contains('open');
   document.getElementById('advanced-toggle').textContent = open ? '− advanced' : '+ advanced';
+  saveSliders();
+}
+
+function toggleAdaptive() {
+  const sec = document.getElementById('adaptive-section');
+  sec.classList.toggle('open');
+  const open = sec.classList.contains('open');
+  document.getElementById('adaptive-toggle').textContent = open ? '− adaptive strategy' : '+ adaptive strategy';
   saveSliders();
 }
 
@@ -1679,6 +2117,23 @@ function shareConfig() {
   document.getElementById('slider-exit').value = maxQIdx;
   document.getElementById('slider-entry').value = Math.max(0, maxQIdx - 60); // default span = past 15y (60 quarters)
   window._dualRange.setMax(maxQIdx);
+
+  // Populate adaptive-strategy dropdowns. 1.0× to 5.0× in 0.1 steps for the
+  // multipliers; 1–30 years for the lookback window.
+  const selAbove  = document.getElementById('select-tqqq-above');
+  const selBelow  = document.getElementById('select-tqqq-below');
+  const selWindow = document.getElementById('select-tqqq-window');
+  for (let v = 1; v <= 50; v++) {
+    const x = (v / 10).toFixed(1);
+    selAbove.insertAdjacentHTML('beforeend', `<option value="${x}">${x}</option>`);
+    selBelow.insertAdjacentHTML('beforeend', `<option value="${x}">${x}</option>`);
+  }
+  selAbove.value = '1.5';
+  selBelow.value = '1.2';
+  for (let y = 1; y <= 30; y++) {
+    selWindow.insertAdjacentHTML('beforeend', `<option value="${y}">${y}</option>`);
+  }
+  selWindow.value = '5';
   // Restore saved state: URL params > localStorage > defaults
   const params = new URLSearchParams(window.location.search);
   const urlMap = { i: 'slider-initial', m: 'slider-monthly', a: 'slider-raise', r: 'slider-rate', e: 'slider-entry', x: 'slider-exit' };
@@ -1694,6 +2149,7 @@ function shareConfig() {
         SLIDER_IDS.forEach(id => { if (saved[id] != null) document.getElementById(id).value = saved[id]; });
         if (saved['toggle-envelope'] != null) document.getElementById('toggle-envelope').checked = !!saved['toggle-envelope'];
         if (saved['toggle-bh-envelope'] != null) document.getElementById('toggle-bh-envelope').checked = !!saved['toggle-bh-envelope'];
+        if (saved['toggle-log-scale'] != null) document.getElementById('toggle-log-scale').checked = !!saved['toggle-log-scale'];
         const advancedSaved = saved['advanced-open'];
         const wantOpen = advancedSaved === true
           || (advancedSaved == null && (
@@ -1705,6 +2161,10 @@ function shareConfig() {
         if (wantOpen) {
           document.getElementById('advanced-section').classList.add('open');
           document.getElementById('advanced-toggle').textContent = '− advanced';
+        }
+        if (saved['adaptive-open'] === true) {
+          document.getElementById('adaptive-section').classList.add('open');
+          document.getElementById('adaptive-toggle').textContent = '− adaptive strategy';
         }
       }
     } catch(e) {}
