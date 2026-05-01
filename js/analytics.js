@@ -1,13 +1,16 @@
-// Analytics dashboard. First chart is a (period × ending year) heatmap of the
-// adaptive strategy's final value. Coloring per the spec, on a log scale:
-//   1. Per column: colMin = min value in the column, colMax = max value.
-//   2. Per column ratio = colMax / colMin ("how big is max compared [to min]").
-//   3. absMaxRatio = max ratio across all columns ("highest color anchor").
-//   4. Per cell: intensity = log(value/colMin) / log(absMaxRatio).
-// Log scale makes mid-range differences much easier to see than linear, and
-// a "5× growth" cell still reads as the same color regardless of which column
-// it lives in — values are visually comparable across columns of very different
-// absolute scale.
+// Analytics dashboard. First chart is a (period × ending year) heatmap of a
+// chosen strategy's final value. Coloring is derived from the cell value's
+// ratio to the "invested-compounded" baseline — i.e., what the same money
+// would have grown to if just left in cash earning the configured rate.
+//   derived = cellValue / investedCompounded     (≥ 1 = beat cash, < 1 = lost)
+// Globally (across all cells, all columns) we find max(log(derived)) and
+// min(log(derived)). Each cell's intensity sits on a diverging scale:
+//   derived = 1   → 0.5 (neutral slate, break-even)
+//   derived ↑     → toward 1   (green, beat baseline)
+//   derived ↓     → toward 0   (red, lost vs baseline)
+// Because the divider is the *same* number that already appears on the main
+// chart's "Invested Compounded" line, cells are directly comparable across
+// columns of very different absolute scale.
 
 const ANALYTICS_MAX_PERIOD = 40;
 
@@ -165,17 +168,19 @@ async function buildHeatmap() {
   const periods = [];
   for (let p = 1; p <= ANALYTICS_MAX_PERIOD && p <= (maxYear - minYear); p++) periods.push(p);
 
-  // Build the list of valid (year, period) cells to simulate.
+  // Build the list of valid (startYear, period) cells. The row is the year
+  // you started investing; the column is "N years later". A cell exists iff
+  // startYear + period - 1 falls within the available data range.
   const cells = [];
-  for (let y = maxYear; y >= minYear + 1; y--) {
+  for (let sy = maxYear - 1; sy >= minYear; sy--) {
     for (const p of periods) {
-      const startYear = y - p + 1;
-      if (startYear < minYear) continue;
-      if (!yearFirst.has(startYear) || !yearLast.has(y)) continue;
-      const entryIdx = yearFirst.get(startYear);
-      const exitIdx  = yearLast.get(y);
+      const endYear = sy + p - 1;
+      if (endYear > maxYear) continue;
+      if (!yearFirst.has(sy) || !yearLast.has(endYear)) continue;
+      const entryIdx = yearFirst.get(sy);
+      const exitIdx  = yearLast.get(endYear);
       if (exitIdx - entryIdx < 2) continue;
-      cells.push({ year: y, period: p, entryIdx, exitIdx, value: 0 });
+      cells.push({ year: sy, period: p, entryIdx, exitIdx, value: 0 });
     }
   }
   const lookup = new Map();
@@ -184,12 +189,12 @@ async function buildHeatmap() {
   // Render the empty skeleton up-front so cells fill in live as sims complete.
   const headerHTML = '<tr><th></th>' + periods.map(p => `<th>${p}y</th>`).join('') + '</tr>';
   const bodyParts = [];
-  for (let y = maxYear; y >= minYear + 1; y--) {
-    bodyParts.push(`<tr><th>${y}</th>`);
+  for (let sy = maxYear - 1; sy >= minYear; sy--) {
+    bodyParts.push(`<tr><th>${sy}</th>`);
     for (const p of periods) {
-      const c = lookup.get(y + ':' + p);
+      const c = lookup.get(sy + ':' + p);
       bodyParts.push(c
-        ? `<td class="heatmap-cell" data-yp="${y}:${p}"></td>`
+        ? `<td class="heatmap-cell" data-yp="${sy}:${p}"></td>`
         : '<td class="heatmap-cell empty"></td>');
     }
     bodyParts.push('</tr>');
@@ -213,6 +218,11 @@ async function buildHeatmap() {
     const c = cells[i];
     const sim = simulate(initial, monthly, rate, c.entryIdx, c.exitIdx, annualRaise, opts);
     c.value = strategyFinalValue(sim, strat);
+    // Cash-baseline divisor: same number plotted as "Invested Compounded" on
+    // the main chart. Comes from the 9sig log regardless of selected strategy.
+    const log = sim.log;
+    const baseline = log && log.length ? log[log.length - 1].investedCompounded : 0;
+    c.derived = baseline > 0 && c.value > 0 ? c.value / baseline : 0;
     const td = cellRefs.get(c.year + ':' + c.period);
     if (td) td.textContent = fmt3sig(c.value);
 
@@ -225,41 +235,32 @@ async function buildHeatmap() {
     }
   }
 
-  // Coloring math: per-column min/max, global max ratio (= max colMax/colMin).
-  const byPeriod = new Map();
+  // Global log-derived range for the diverging color scale.
+  let minLogD = 0, maxLogD = 0;
   for (const c of cells) {
-    if (!byPeriod.has(c.period)) byPeriod.set(c.period, []);
-    byPeriod.get(c.period).push(c);
-  }
-  const colMin = new Map(), colMax = new Map();
-  for (const [p, list] of byPeriod) {
-    let mn = Infinity, mx = -Infinity;
-    for (const c of list) {
-      if (c.value > 0 && c.value < mn) mn = c.value;
-      if (c.value > mx) mx = c.value;
-    }
-    colMin.set(p, mn);
-    colMax.set(p, mx);
-  }
-  let absMaxRatio = 1;
-  for (const [p, mn] of colMin) {
-    if (mn > 0 && Number.isFinite(mn)) {
-      const r = colMax.get(p) / mn;
-      if (r > absMaxRatio) absMaxRatio = r;
+    if (c.derived > 0) {
+      const ld = Math.log(c.derived);
+      if (ld < minLogD) minLogD = ld;
+      if (ld > maxLogD) maxLogD = ld;
     }
   }
-  const logAbsMax = Math.log(absMaxRatio);
 
-  // Apply colors. Logarithmic intensity: log(value/colMin) / log(absMaxRatio).
-  // A "5× growth" cell now visually equals a "5× growth" cell in any column,
-  // and the spread between mid-range cells is much easier to see than linear.
+  // Apply colors: diverging palette anchored at derived = 1 (intensity 0.5).
+  // Above 1 gradates toward green, below 1 toward red, log-spaced so a 4×
+  // baseline cell looks the same regardless of period length or scale.
   for (const c of cells) {
     const td = cellRefs.get(c.year + ':' + c.period);
     if (!td) continue;
-    const mn = colMin.get(c.period);
-    let intensity = 0;
-    if (Number.isFinite(mn) && mn > 0 && c.value > 0 && logAbsMax > 0) {
-      intensity = Math.log(c.value / mn) / logAbsMax;
+    let intensity = 0.5;
+    if (c.derived > 0) {
+      const ld = Math.log(c.derived);
+      if (ld >= 0 && maxLogD > 0) {
+        intensity = 0.5 + 0.5 * (ld / maxLogD);
+      } else if (ld < 0 && minLogD < 0) {
+        intensity = 0.5 - 0.5 * (ld / minLogD);
+      } else {
+        intensity = 0.5;
+      }
     }
     intensity = Math.max(0, Math.min(1, intensity));
     // Diverging red → slate → green. Stops match the app's existing red
@@ -278,7 +279,8 @@ async function buildHeatmap() {
       b = Math.round(105 + (128 - 105) * u);
     }
     td.style.background = `rgb(${r},${g},${b})`;
-    td.title = `${c.year} · ${c.period}y: ${fmtFull(Math.round(c.value))}`;
+    const mult = c.derived > 0 ? c.derived.toFixed(2) + '×' : '—';
+    td.title = `Invested ${c.year}, ${c.period}y later (${c.year + c.period - 1}): ${fmtFull(Math.round(c.value))} (${mult} vs cash baseline)`;
   }
 
   progEl.setAttribute('hidden', '');
