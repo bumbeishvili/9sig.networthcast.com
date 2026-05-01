@@ -456,7 +456,7 @@
 
 <div class="header">
   <h1>9sig Strategy Simulator</h1>
-  <p>Quarterly rebalancing on synthetic TQQQ (3x QQQ) &middot; 1999&ndash;2026</p>
+  <p>Quarterly rebalancing on synthetic TQQQ (3x QQQ) &middot; 1985&ndash;2026</p>
   <button id="share-btn" onclick="shareConfig()">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
     Share Current Configuration
@@ -502,9 +502,9 @@
 
     <div id="advanced-section">
       <div class="control-group">
-        <label>Annual Increase</label>
-        <div class="value-display" id="disp-raise">0%</div>
-        <input type="range" id="slider-raise" min="0" max="20" step="0.5" value="0">
+        <label>Monthly Contribution Annual Increase</label>
+        <div class="value-display" id="disp-raise">3%</div>
+        <input type="range" id="slider-raise" min="0" max="20" step="0.5" value="3">
       </div>
 
       <div class="control-group">
@@ -731,13 +731,18 @@ function initialToSlider(v) {
 }
 
 function fmt(n) {
-  if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
-  if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
-  return '$' + n.toFixed(0);
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const sig4 = v => (v >= 100 ? v.toFixed(1) : v >= 10 ? v.toFixed(2) : v.toFixed(3));
+  if (abs >= 1e12) return sign + '$' + sig4(abs / 1e12) + 'T';
+  if (abs >= 1e9)  return sign + '$' + sig4(abs / 1e9)  + 'B';
+  if (abs >= 1e6)  return sign + '$' + sig4(abs / 1e6)  + 'M';
+  if (abs >= 1e3)  return sign + '$' + sig4(abs / 1e3)  + 'K';
+  return sign + '$' + Math.round(abs);
 }
 
 function fmtFull(n) {
-  return '$' + Math.round(n).toLocaleString('en-US');
+  return fmt(n);
 }
 
 function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, opts) {
@@ -986,6 +991,7 @@ function render() {
   const retBH = cagr(finalBH, totalContributed);
   const retQQQ = cagr(finalQQQ, totalContributed);
   const retSPY = cagr(finalSPY, totalContributed);
+  const retInv = cagr(finalLog.investedCompounded, totalContributed);
 
   document.getElementById('stats-grid').innerHTML = `
     <div class="stat-card">
@@ -1025,8 +1031,8 @@ function render() {
       <div class="stat-value" style="color:var(--text)">${fmtFull(finalLog.investedCompounded)}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Cash Reserve</div>
-      <div class="stat-value" style="color:var(--orange)">${fmtFull(finalLog.cash)}</div>
+      <div class="stat-label">Invested Compounded Annualized</div>
+      <div class="stat-value ${retInv >= 0 ? 'positive' : 'negative'}">${retInv >= 0 ? '+' : ''}${retInv.toFixed(1)}%</div>
     </div>
   `;
 
@@ -1083,7 +1089,9 @@ function render() {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
   const lineColors = ['#22d3ee', '#38bdf8', '#f87171', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)'];
-  const lineNames = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', 'B&H SPY', '9sig TQQQ Target', '9sig Cash', 'Invested Compounded'];
+  const lineNames  = ['9sig Total', '9sig TQQQ Holding', 'B&H TQQQ', 'B&H QQQ', 'B&H SPY', '9sig TQQQ Target', '9sig Cash', 'Invested Comp.'];
+  // Match the borderDash on the corresponding chart dataset; null = solid.
+  const lineDashes = [null, [2,2], [6,3], [8,4], [6,3], [4,4], null, [3,3]];
 
   const externalTooltip = (context) => {
     const { chart: c, tooltip } = context;
@@ -1097,18 +1105,39 @@ function render() {
     const date = c.data.labels[idx];
     const vals = [ds[0].data[idx], ds[1].data[idx], ds[2].data[idx], ds[3].data[idx], ds[4].data[idx], ds[5].data[idx], ds[6].data[idx], ds[7].data[idx]];
 
-    el.innerHTML = `
-      <div class="tt-date">${qLabel(date)}</div>
-      ${lineNames.map((n, i) => `
-        <div class="tt-row">
-          <div class="tt-row-left">
-            <div class="tt-dot" style="background:${lineColors[i]}"></div>
+    const rgba = (col, a) => {
+      if (col.startsWith('rgba')) return col.replace(/,\s*[\d.]+\s*\)$/, `,${a})`);
+      const m = col.match(/^#([0-9a-f]{6})$/i);
+      if (!m) return col;
+      const n = parseInt(m[1], 16);
+      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+    };
+
+    const items = lineNames
+      .map((n, i) => ({ i, n, v: vals[i] }))
+      .filter(({ i, v }) => c.isDatasetVisible(i) && v != null && !Number.isNaN(v))
+      .sort((a, b) => b.v - a.v);
+    const maxV = Math.max(0, ...items.map(it => it.v));
+
+    const rows = items.map(({ i, n, v }) => {
+      const pct = maxV > 0 ? Math.max(0, (v / maxV) * 100) : 0;
+      const dashAttr = lineDashes[i] ? `stroke-dasharray="${lineDashes[i].join(',')}"` : '';
+      const sample = `<svg width="20" height="4" style="flex-shrink:0;overflow:visible">
+        <line x1="0" y1="2" x2="20" y2="2" stroke="${lineColors[i]}" stroke-width="2" stroke-linecap="round" ${dashAttr}/>
+      </svg>`;
+      return `
+        <div class="tt-row" style="position:relative">
+          <div style="position:absolute;left:0;top:2px;bottom:2px;width:${pct}%;background:${rgba(lineColors[i], 0.20)};border-radius:3px;pointer-events:none"></div>
+          <div class="tt-row-left" style="position:relative;z-index:1">
+            ${sample}
             <span class="tt-name">${n}</span>
           </div>
-          <span class="tt-val">${fmtFull(Math.round(vals[i]))}</span>
+          <span class="tt-val" style="position:relative;z-index:1">${fmtFull(Math.round(v))}</span>
         </div>
-      `).join('')}
-    `;
+      `;
+    }).join('');
+
+    el.innerHTML = `<div class="tt-date">${qLabel(date)}</div>${rows}`;
 
     el.style.display = 'block';
     const panelRect = c.canvas.closest('.panel').getBoundingClientRect();
@@ -1648,6 +1677,7 @@ function shareConfig() {
     `Each ghost line is the same 9sig run with rebalance shifted N trading days earlier (1–${envelopeShiftCount}).`;
   const maxQIdx = quarterlyData.length - 1;
   document.getElementById('slider-exit').value = maxQIdx;
+  document.getElementById('slider-entry').value = Math.max(0, maxQIdx - 60); // default span = past 15y (60 quarters)
   window._dualRange.setMax(maxQIdx);
   // Restore saved state: URL params > localStorage > defaults
   const params = new URLSearchParams(window.location.search);
