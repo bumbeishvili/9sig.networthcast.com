@@ -303,6 +303,28 @@
     height: 420px;
   }
 
+  .chart-log-toggle {
+    position: absolute;
+    left: -4px;
+    bottom: 3px;
+    padding: 0;
+    font: 600 10px 'DM Sans', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #475569;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  .chart-log-toggle:hover {
+    color: #94a3b8;
+  }
+  .chart-log-toggle[aria-pressed="true"] {
+    color: var(--accent);
+  }
+
   #custom-tooltip {
     display: none;
     position: absolute;
@@ -615,6 +637,7 @@
     <div class="panel" style="position:relative;">
       <div class="chart-container">
         <canvas id="mainChart"></canvas>
+        <button type="button" id="chart-log-toggle" class="chart-log-toggle" aria-pressed="false" title="Toggle logarithmic Y-axis">log</button>
       </div>
       <div id="custom-tooltip"></div>
 
@@ -1305,7 +1328,7 @@ function render() {
   const adaptivePointHoverRadius = adaptivePoints.map(() => 0);
   const adaptivePointBg = adaptivePoints.map(a => a.state === '9sig' ? '#22d3ee' : '#f87171');
   const adaptiveTransitions = adaptivePoints.map((a, i) => {
-    if (i === 0) return a.state === '9sig' ? 'starts 9sig' : 'starts TQQQ';
+    if (i === 0) return a.state === '9sig' ? 'to 9sig' : 'to TQQQ';
     if (a.state === adaptivePoints[i-1].state) return null;
     return a.state === '9sig' ? 'to 9sig' : 'to TQQQ';
   });
@@ -1506,10 +1529,10 @@ function render() {
   // For each transition: dashed-circle marker at the data point, diagonal
   // connector, horizontal underline, then bold "to 9sig" / "to TQQQ" text
   // sitting on the underline. Label is placed via Voronoi-style search:
-  // gather y-coords of every visible line at the same x-index, try increasing
-  // offset distances along a 45° diagonal in the preferred direction, fall
-  // back to the opposite direction if everything is occluded. Tracks
-  // previously-placed label rects so back-to-back transitions don't pile up.
+  // try increasing 45° offsets in both vertical AND horizontal directions
+  // (right preferred, left as fallback), checking the full label rect against
+  // every visible line sampled across its x-span. Tracks previously-placed
+  // label rects so back-to-back transitions don't pile up.
   const adaptiveAnnotationPlugin = {
     id: 'adaptiveAnnotations',
     afterDatasetsDraw(c) {
@@ -1522,12 +1545,46 @@ function render() {
       const cx = c.ctx;
       const top = c.chartArea.top;
       const bottom = c.chartArea.bottom;
+      const left = c.chartArea.left;
       const right = c.chartArea.right;
 
       const labelHeight  = 14;
       const dotR         = 5;
       const distancesAsc = [32, 44, 58, 74, 92, 112, 134, 160];
       const placed       = [];
+
+      // Pre-compute the visible non-adaptive line metas for sampling y across
+      // the label's x-span when checking line overlap.
+      const otherMetas = [];
+      c.data.datasets.forEach((d, idx) => {
+        if (idx === adaptiveIdx || !c.isDatasetVisible(idx)) return;
+        const m = c.getDatasetMeta(idx);
+        if (m) otherMetas.push(m);
+      });
+
+      // Returns true if any visible line crosses the y-band [yTop, yBot]
+      // anywhere inside the x-range [xMin, xMax].
+      const lineCrossesRect = (xMin, xMax, yTop, yBot) => {
+        for (const m of otherMetas) {
+          const pts = m.data;
+          for (let k = 0; k < pts.length - 1; k++) {
+            const a = pts[k], b = pts[k + 1];
+            if (!a || !b) continue;
+            // segment x-range overlap with rect x-range?
+            const sxMin = Math.min(a.x, b.x), sxMax = Math.max(a.x, b.x);
+            if (sxMax < xMin || sxMin > xMax) continue;
+            // clip y-values at the rect's x edges (linear interp)
+            const dx = b.x - a.x;
+            const t1 = dx === 0 ? 0 : Math.max(0, Math.min(1, (xMin - a.x) / dx));
+            const t2 = dx === 0 ? 1 : Math.max(0, Math.min(1, (xMax - a.x) / dx));
+            const y1 = a.y + (b.y - a.y) * t1;
+            const y2 = a.y + (b.y - a.y) * t2;
+            const segYMin = Math.min(y1, y2), segYMax = Math.max(y1, y2);
+            if (segYMax >= yTop && segYMin <= yBot) return true;
+          }
+        }
+        return false;
+      };
 
       cx.save();
       transitions.forEach((trans, i) => {
@@ -1536,61 +1593,56 @@ function render() {
         if (!pt) return;
         const isToSig = trans.includes('9sig');
         const color = isToSig ? '#22d3ee' : '#f87171';
-        const titleText = trans;            // e.g. "to 9sig", "to TQQQ", "starts 9sig"
+        const titleText = trans;            // "to 9sig" or "to TQQQ"
         const preferDir = isToSig ? -1 : 1; // 9sig above, TQQQ below
         // Measure text width once so the placement search uses the actual label rect
         cx.font = 'bold 10px "DM Sans", sans-serif';
         const labelWidth = Math.ceil(cx.measureText(titleText).width) + 10;
 
-        // y-coords of every other visible line at this x-index
-        const otherYs = [];
-        c.data.datasets.forEach((d, idx) => {
-          if (idx === adaptiveIdx || !c.isDatasetVisible(idx)) return;
-          const m = c.getDatasetMeta(idx);
-          const p = m && m.data[i];
-          if (p) otherYs.push(p.y);
-        });
-
-        // 45° diagonal: dx = dy at any chosen distance. Try both signs.
-        const dirsTry = [preferDir, -preferDir];
-        let chosenDx = 0, chosenDy = 0, chosenRect = null;
+        // 45° diagonal: dx = dy at any chosen distance. Try both vertical and
+        // horizontal signs. Right-side placement is preferred; left is the
+        // fallback when the right side is crowded or near the chart edge.
+        const vDirs = [preferDir, -preferDir];
+        const hDirs = [1, -1];
+        let chosenDx = 0, chosenDy = 0, chosenSide = 1, chosenRect = null;
 
         outer: for (const dist of distancesAsc) {
-          for (const dirSign of dirsTry) {
-            const dx = dist;
-            const dy = dirSign * dist;
-            const ax = pt.x + dx;             // anchor (kink between diagonal and underline)
-            const ay = pt.y + dy;
-            // Label rect: text sits ABOVE the underline regardless of direction
-            const lTop = ay - labelHeight - 2;
-            const lBot = ay + 2;
-            const lLeft = ax;
-            const lRight = ax + labelWidth;
-            if (lTop < top + 2 || lBot > bottom - 2) continue;
-            if (lRight > right - 2) continue;
-            // overlap with any visible line at this x?
-            let crossesLine = false;
-            for (const oy of otherYs) {
-              if (oy >= lTop - 2 && oy <= lBot + 2) { crossesLine = true; break; }
-            }
-            if (crossesLine) continue;
-            // overlap with a previously placed label rect?
-            let labelClash = false;
-            for (const p of placed) {
-              if (lLeft < p.x2 && lRight > p.x1 && lTop < p.y2 && lBot > p.y1) {
-                labelClash = true; break;
+          for (const hSign of hDirs) {
+            for (const vSign of vDirs) {
+              const dx = hSign * dist;
+              const dy = vSign * dist;
+              const ax = pt.x + dx;             // anchor (kink between diagonal and underline)
+              const ay = pt.y + dy;
+              // Label rect: text sits ABOVE the underline regardless of direction.
+              // For right-side (hSign=+1) the rect extends right from ax; for
+              // left-side (hSign=-1) it extends left from ax.
+              const lTop = ay - labelHeight - 2;
+              const lBot = ay + 2;
+              const lLeft = hSign > 0 ? ax : ax - labelWidth;
+              const lRight = hSign > 0 ? ax + labelWidth : ax;
+              if (lTop < top + 2 || lBot > bottom - 2) continue;
+              if (lLeft < left + 2 || lRight > right - 2) continue;
+              // overlap with any visible line anywhere across the label's x-range?
+              if (lineCrossesRect(lLeft, lRight, lTop, lBot)) continue;
+              // overlap with a previously placed label rect?
+              let labelClash = false;
+              for (const p of placed) {
+                if (lLeft < p.x2 && lRight > p.x1 && lTop < p.y2 && lBot > p.y1) {
+                  labelClash = true; break;
+                }
               }
+              if (labelClash) continue;
+              chosenDx = dx; chosenDy = dy; chosenSide = hSign;
+              chosenRect = { x1: lLeft, y1: lTop, x2: lRight, y2: lBot };
+              break outer;
             }
-            if (labelClash) continue;
-            chosenDx = dx; chosenDy = dy;
-            chosenRect = { x1: lLeft, y1: lTop, x2: lRight, y2: lBot };
-            break outer;
           }
         }
         if (!chosenRect) {
-          // fallback: smallest offset in preferred direction
+          // fallback: smallest offset in preferred direction, right side
           chosenDx = distancesAsc[0];
           chosenDy = preferDir * distancesAsc[0];
+          chosenSide = 1;
         } else {
           placed.push(chosenRect);
         }
@@ -1618,18 +1670,25 @@ function render() {
         cx.lineTo(ax, ay);
         cx.stroke();
 
-        // horizontal underline supporting the text
+        // horizontal underline supporting the text — extends in the same
+        // direction as the label rect
+        const underEnd = chosenSide > 0 ? ax + labelWidth - 6 : ax - labelWidth + 6;
         cx.beginPath();
         cx.moveTo(ax, ay);
-        cx.lineTo(ax + labelWidth - 6, ay);
+        cx.lineTo(underEnd, ay);
         cx.stroke();
 
         // bold text sitting on the underline
         cx.fillStyle = color;
         cx.font = 'bold 10px "DM Sans", sans-serif';
-        cx.textAlign = 'left';
         cx.textBaseline = 'bottom';
-        cx.fillText(titleText, ax + 2, ay - 2);
+        if (chosenSide > 0) {
+          cx.textAlign = 'left';
+          cx.fillText(titleText, ax + 2, ay - 2);
+        } else {
+          cx.textAlign = 'right';
+          cx.fillText(titleText, ax - 2, ay - 2);
+        }
       });
       cx.restore();
     }
@@ -1831,6 +1890,19 @@ function render() {
             font: { family: 'JetBrains Mono', size: 10 },
             callback: v => fmt(v)
           },
+          // On log scale, Chart.js generates a tick at every 1..9 × 10^n which
+          // is way too dense. Keep only "nice" ticks (1, 2, 5 × 10^n) so the
+          // axis stays readable.
+          afterBuildTicks: (scale) => {
+            if (!document.getElementById('toggle-log-scale').checked) return;
+            scale.ticks = scale.ticks.filter(t => {
+              const v = t.value;
+              if (v <= 0) return false;
+              const exp = Math.floor(Math.log10(v));
+              const m = v / Math.pow(10, exp);
+              return Math.abs(m - 1) < 0.05 || Math.abs(m - 2) < 0.05 || Math.abs(m - 5) < 0.05;
+            });
+          },
           grid: { color: 'rgba(30,42,63,0.5)' }
         }
       }
@@ -1907,6 +1979,19 @@ document.getElementById('slider-envelope-opacity').addEventListener('input', () 
     render();
   });
 });
+
+// In-chart "log" pill mirrors the Logarithmic Y-axis checkbox so the user can
+// flip the y-scale without leaving the chart.
+const logCheckbox = document.getElementById('toggle-log-scale');
+const logPill = document.getElementById('chart-log-toggle');
+const syncLogPill = () => logPill.setAttribute('aria-pressed', logCheckbox.checked ? 'true' : 'false');
+logPill.addEventListener('click', () => {
+  logCheckbox.checked = !logCheckbox.checked;
+  logCheckbox.dispatchEvent(new Event('change'));
+  syncLogPill();
+});
+logCheckbox.addEventListener('change', syncLogPill);
+syncLogPill();
 
 function toggleAdvanced() {
   const sec = document.getElementById('advanced-section');
@@ -2172,6 +2257,7 @@ function shareConfig() {
   document.getElementById('disp-envelope-opacity').textContent =
     'opacity ' + (+document.getElementById('slider-envelope-opacity').value / 100).toFixed(2);
   window._dualRange.updateUI();
+  syncLogPill();
   render();
 })();
 </script>
