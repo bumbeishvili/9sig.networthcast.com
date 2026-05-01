@@ -2129,11 +2129,11 @@ function shareConfig() {
     selBelow.insertAdjacentHTML('beforeend', `<option value="${x}">${x}</option>`);
   }
   selAbove.value = '1.5';
-  selBelow.value = '1.2';
+  selBelow.value = '1.0';
   for (let y = 1; y <= 30; y++) {
     selWindow.insertAdjacentHTML('beforeend', `<option value="${y}">${y}</option>`);
   }
-  selWindow.value = '5';
+  selWindow.value = '6';
   // Restore saved state: URL params > localStorage > defaults
   const params = new URLSearchParams(window.location.search);
   const urlMap = { i: 'slider-initial', m: 'slider-monthly', a: 'slider-raise', r: 'slider-rate', e: 'slider-entry', x: 'slider-exit' };
