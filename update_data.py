@@ -44,7 +44,10 @@ def synthesize_tqqq_prefix(qqq_df, tqqq_df):
     n = len(pre)
     if n == 0:
         return []
-    closes = [cell(c) for c in pre['Close']]
+    # yfinance returns MultiIndex columns even for single tickers, so iterating
+    # `pre['Close']` yields column labels ('QQQ') instead of prices. Go via
+    # iterrows like the main write loop already does.
+    closes = [cell(row['Close']) for _, row in pre.iterrows()]
     synth = [0.0] * n
     synth[-1] = real_start_price
     for i in range(n - 1, 0, -1):
