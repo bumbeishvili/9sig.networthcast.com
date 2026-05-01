@@ -698,17 +698,17 @@ function parseDataFile(text) {
 }
 
 async function loadQQQDaily() {
-  const resp = await fetch('simulation_tqqq_qqq - qqq.tsv?v=baked');
+  const resp = await fetch('data/simulation_tqqq_qqq - qqq.tsv?v=baked');
   return parseDataFile(await resp.text());
 }
 
 async function loadTQQQDaily() {
-  const resp = await fetch('simulation_tqqq_qqq - tqqq.tsv?v=baked');
+  const resp = await fetch('data/simulation_tqqq_qqq - tqqq.tsv?v=baked');
   return parseDataFile(await resp.text());
 }
 
 async function loadSPYDaily() {
-  const resp = await fetch('simulation_tqqq_qqq - spy.tsv?v=baked');
+  const resp = await fetch('data/simulation_tqqq_qqq - spy.tsv?v=baked');
   return parseDataFile(await resp.text());
 }
 

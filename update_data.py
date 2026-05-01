@@ -65,6 +65,8 @@ QQQ_EXPENSE_DAILY  = 0.0020   / 252  # 0.20%   annual
 TQQQ_EXPENSE_DAILY = 0.0088   / 252  # 0.88%   annual
 SPY_EXPENSE_DAILY  = 0.000945 / 252  # 0.0945% annual
 
+DATA_DIR = 'data'
+
 tickers = [
     ('QQQ',  'simulation_tqqq_qqq - qqq.tsv'),
     ('TQQQ', 'simulation_tqqq_qqq - tqqq.tsv'),
@@ -249,10 +251,13 @@ else:
 prefix_by_ticker = {'QQQ': qqq_prefix_rows, 'TQQQ': tqqq_prefix_rows, 'SPY': spy_prefix_rows}
 real_by_ticker   = {'QQQ': qqq_df, 'TQQQ': tqqq_df, 'SPY': spy_df}
 
+data_dir = os.path.join(basedir, DATA_DIR)
+os.makedirs(data_dir, exist_ok=True)
+
 for ticker, filename in tickers:
     data = real_by_ticker[ticker]
     prefix_rows = prefix_by_ticker.get(ticker, [])
-    path = os.path.join(basedir, filename)
+    path = os.path.join(data_dir, filename)
 
     with open(path, 'w') as f:
         f.write('Date\tClose\n')
