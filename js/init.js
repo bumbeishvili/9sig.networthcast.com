@@ -47,6 +47,29 @@
     const val = params.get(key);
     if (val !== null) { document.getElementById(sliderId).value = val; hasUrlParams = true; }
   }
+
+  // Adaptive strategy params
+  if (params.get('tu') !== null) { document.getElementById('select-tqqq-above').value = params.get('tu'); hasUrlParams = true; }
+  if (params.get('td') !== null) { document.getElementById('select-tqqq-below').value = params.get('td'); hasUrlParams = true; }
+  if (params.get('tw') !== null) { document.getElementById('select-tqqq-window').value = params.get('tw'); hasUrlParams = true; }
+  // Toggles + envelope opacity
+  if (params.get('l')  !== null) { document.getElementById('toggle-log-scale').checked   = params.get('l')  === '1'; hasUrlParams = true; }
+  if (params.get('ev') !== null) { document.getElementById('toggle-envelope').checked    = params.get('ev') === '1'; hasUrlParams = true; }
+  if (params.get('bv') !== null) { document.getElementById('toggle-bh-envelope').checked = params.get('bv') === '1'; hasUrlParams = true; }
+  if (params.get('eo') !== null) { document.getElementById('slider-envelope-opacity').value = params.get('eo'); hasUrlParams = true; }
+  // Section open/closed
+  if (params.get('vo') === '1') {
+    document.getElementById('advanced-section').classList.add('open');
+    document.getElementById('advanced-toggle').textContent = '− advanced';
+  }
+  if (params.get('ao') === '1') {
+    document.getElementById('adaptive-section').classList.add('open');
+    document.getElementById('adaptive-toggle').textContent = '− adaptive strategy';
+  }
+  // Analytics modal pre-state (modal is opened after render() so the chart exists)
+  if (params.get('as')) analyticsStrategy = params.get('as');
+  if (params.get('ab')) analyticsBaseline = params.get('ab');
+
   if (!hasUrlParams) {
     try {
       const saved = JSON.parse(localStorage.getItem(LS_KEY));
@@ -79,4 +102,22 @@
   window._dualRange.updateUI();
   syncLogPill();
   render();
+
+  // Apply post-render shared state: dataset visibility + analytics modal.
+  const hd = params.get('hd');
+  if (hd && chart) {
+    hd.split(',').map(Number).forEach(i => {
+      if (Number.isFinite(i)) chart.setDatasetVisibility(i, false);
+    });
+    chart.update();
+  }
+  if (params.get('am') === '1') {
+    // Sync the strategy pill UI to the URL-restored strategy before opening
+    document.querySelectorAll('#analytics-strategy-options button').forEach(b => {
+      b.classList.toggle('active', b.dataset.strat === analyticsStrategy);
+    });
+    const baselineSelect = document.getElementById('analytics-baseline');
+    if (baselineSelect) baselineSelect.value = analyticsBaseline;
+    toggleAnalytics();
+  }
 })();

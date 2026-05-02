@@ -185,6 +185,10 @@
       <div class="analytics-chart">
         <div class="analytics-chart-header">
           <div class="analytics-chart-title-row">
+            <button type="button" class="modal-share" id="analytics-share" onclick="shareConfig()" title="Copy share link">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+              Share
+            </button>
             <h3 id="analytics-chart-title">Adaptive — Final Value</h3>
             <div class="analytics-strategy-options" id="analytics-strategy-options">
               <button type="button" data-strat="adaptive" class="active">Adaptive</button>
@@ -192,6 +196,20 @@
               <button type="button" data-strat="bh-tqqq">B&amp;H TQQQ</button>
               <button type="button" data-strat="bh-qqq">B&amp;H QQQ</button>
               <button type="button" data-strat="bh-spy">B&amp;H SPY</button>
+            </div>
+            <div class="analytics-baseline-wrap">
+              <span class="analytics-baseline-label">
+                <span>color by vs</span>
+                <span>performance of</span>
+              </span>
+              <select id="analytics-baseline" class="analytics-baseline-select" title="Color baseline">
+                <option value="compounded" selected>Compounded Cash</option>
+                <option value="bh-spy">B&amp;H SPY</option>
+                <option value="bh-qqq">B&amp;H QQQ</option>
+                <option value="adaptive">Adaptive</option>
+                <option value="9sig">9sig</option>
+                <option value="bh-tqqq">B&amp;H TQQQ</option>
+              </select>
             </div>
             <div class="analytics-chart-actions">
               <span class="analytics-modal-tag">Analytics Grid</span>
@@ -209,6 +227,7 @@
       </div>
     </div>
   </div>
+  <div id="heatmap-tooltip" class="heatmap-tooltip" hidden></div>
 </div>
 
 <script src="js/data.js"></script>

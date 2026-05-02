@@ -242,6 +242,25 @@
     flex-direction: column;
     overflow: hidden;
   }
+  .modal-share {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(34, 211, 238, 0.08);
+    border: 1px solid rgba(34, 211, 238, 0.3);
+    border-radius: 6px;
+    color: var(--accent);
+    font: 600 10px 'DM Sans', sans-serif;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .modal-share:hover {
+    background: rgba(34, 211, 238, 0.16);
+    border-color: var(--accent);
+  }
   .modal-close {
     width: 24px;
     height: 24px;
@@ -316,6 +335,44 @@
   .analytics-strategy-options button.active {
     background: var(--accent);
     color: #0a0e17;
+  }
+  .analytics-baseline-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .analytics-baseline-label {
+    display: inline-flex;
+    flex-direction: column;
+    line-height: 1.1;
+    font: 600 8px 'DM Sans', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+  .analytics-baseline-select {
+    padding: 4px 8px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font: 600 10px 'DM Sans', sans-serif;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .analytics-baseline-select:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .analytics-baseline-select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .analytics-baseline-select option {
+    background: var(--surface);
+    color: var(--text);
   }
   .analytics-chart-header h3 {
     font-size: 11px;
@@ -468,6 +525,99 @@
     line-height: 1;
     opacity: 0.55;
     pointer-events: none;
+  }
+  /* Hover cross-highlight: row + column outline in cyan, intersection brighter. */
+  .heatmap-table .row-hover,
+  .heatmap-table .col-hover {
+    outline: 1px solid rgba(34, 211, 238, 0.45);
+    outline-offset: -1px;
+    position: relative;
+    z-index: 1;
+  }
+  .heatmap-table .row-hover.col-hover {
+    outline-color: rgba(34, 211, 238, 0.95);
+    z-index: 2;
+  }
+  .heatmap-table tbody th.row-hover,
+  .heatmap-table thead th.col-hover {
+    color: var(--accent);
+    background: rgba(34, 211, 238, 0.14);
+  }
+
+  /* Custom interactive tooltip (replaces native title) */
+  .heatmap-tooltip {
+    position: fixed;
+    z-index: 200;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid rgba(34, 211, 238, 0.4);
+    border-radius: 6px;
+    padding: 10px 12px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.6);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.5;
+    max-width: 260px;
+  }
+  .heatmap-tooltip[hidden] { display: none; }
+  .heatmap-tooltip .tt-period {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .heatmap-tooltip .tt-strat {
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .heatmap-tooltip .tt-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 4px;
+  }
+  .heatmap-tooltip .tt-bar-row {
+    display: grid;
+    grid-template-columns: 110px 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .heatmap-tooltip .tt-bar-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .heatmap-tooltip .tt-bar-row.tt-bar-primary .tt-bar-label {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .heatmap-tooltip .tt-bar-track {
+    height: 8px;
+    background: rgba(15, 23, 42, 0.7);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .heatmap-tooltip .tt-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: rgba(100, 116, 139, 0.6);
+    transition: width 0.15s;
+  }
+  .heatmap-tooltip .tt-bar-row.tt-bar-primary .tt-bar-fill {
+    background: var(--accent);
+  }
+  .heatmap-tooltip .tt-bar-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
   }
 
   .dual-range {

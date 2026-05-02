@@ -23,8 +23,33 @@ const STRATEGY_LABELS = {
 };
 
 let analyticsStrategy = 'adaptive';
+let analyticsBaseline = 'compounded';
 let analyticsBuildEpoch = 0;
 let analyticsRefreshTimer = null;
+
+const BASELINE_LABELS = {
+  'compounded': 'Compounded Cash',
+  'bh-spy':     'B&H SPY',
+  'bh-qqq':     'B&H QQQ',
+  'adaptive':   'Adaptive',
+  '9sig':       '9sig',
+  'bh-tqqq':    'B&H TQQQ',
+};
+
+// Pull a baseline value out of a simulate() result for the chosen divisor.
+// 'compounded' is the cash-only baseline plotted as "Invested Compounded";
+// the others mirror strategyFinalValue.
+function baselineFinalValue(sim, key) {
+  switch (key) {
+    case '9sig':      { const a = sim.log;           return a && a.length ? a[a.length - 1].total : 0; }
+    case 'bh-tqqq':   { const a = sim.bhPoints;      return a && a.length ? a[a.length - 1].value : 0; }
+    case 'bh-qqq':    { const a = sim.qqqPoints;     return a && a.length ? a[a.length - 1].value : 0; }
+    case 'bh-spy':    { const a = sim.spyPoints;     return a && a.length ? a[a.length - 1].value : 0; }
+    case 'adaptive':  { const a = sim.adaptivePoints;return a && a.length ? a[a.length - 1].value : 0; }
+    case 'compounded':
+    default:          { const a = sim.log;           return a && a.length ? a[a.length - 1].investedCompounded : 0; }
+  }
+}
 
 // Pull the chosen strategy's final value out of a simulate() result.
 function strategyFinalValue(sim, strat) {
@@ -104,6 +129,107 @@ document.addEventListener('click', (e) => {
   buildHeatmap();
 });
 
+// Baseline selector: changes the divisor used to compute cell coloring.
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'analytics-baseline') {
+    analyticsBaseline = e.target.value;
+    buildHeatmap();
+  }
+});
+
+// Cross-hair hover: highlight the row + column of the hovered cell, and show
+// the rich tooltip. Listeners live on the (stable) heatmap wrapper, so they
+// survive every rebuild without re-wiring.
+(function setupHeatmapHover() {
+  const grid = document.getElementById('analytics-heatmap');
+  const tooltip = document.getElementById('heatmap-tooltip');
+  if (!grid || !tooltip) return;
+
+  function clearHighlights() {
+    grid.querySelectorAll('.row-hover, .col-hover').forEach(el => el.classList.remove('row-hover', 'col-hover'));
+  }
+  function applyHighlights(r, c) {
+    if (r) grid.querySelectorAll(`[data-r="${r}"]`).forEach(el => el.classList.add('row-hover'));
+    if (c) grid.querySelectorAll(`[data-c="${c}"]`).forEach(el => el.classList.add('col-hover'));
+  }
+  function hideTooltip() { tooltip.setAttribute('hidden', ''); }
+  function positionTooltip(td, e) {
+    // Anchor the tooltip below+right of the *cell* so it never overlaps the
+    // highlighted row's horizontal band or the highlighted column's vertical
+    // band. Falls back to cursor coords if no cell rect.
+    const margin = 14;
+    tooltip.style.left = '0px'; tooltip.style.top = '0px';
+    const rect = tooltip.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let x, y;
+    if (td) {
+      const cr = td.getBoundingClientRect();
+      x = cr.right  + margin;
+      y = cr.bottom + margin;
+      // Flip to the left of the cell if it would overflow right.
+      if (x + rect.width > vw - 8) x = cr.left - rect.width - margin;
+      // Flip above the cell if it would overflow bottom.
+      if (y + rect.height > vh - 8) y = cr.top - rect.height - margin;
+    } else {
+      x = e.clientX + margin;
+      y = e.clientY + margin;
+    }
+    tooltip.style.left = Math.max(4, x) + 'px';
+    tooltip.style.top  = Math.max(4, y) + 'px';
+  }
+  function fillTooltip(td) {
+    const startYear = +td.dataset.r;
+    const period    = +td.dataset.c;
+    const endYear   = +td.dataset.endYear;
+    const value     = +td.dataset.value;
+    const derived   = +td.dataset.derived;
+    const baselineVal = derived > 0 ? value / derived : 0;
+    const stratLabel = STRATEGY_LABELS[analyticsStrategy] || 'Adaptive';
+    const baseLabel  = BASELINE_LABELS[analyticsBaseline] || 'Baseline';
+    const maxV = Math.max(value, baselineVal) || 1;
+    const w1 = (value / maxV * 100).toFixed(1);
+    const w2 = (baselineVal / maxV * 100).toFixed(1);
+    tooltip.innerHTML = `
+      <div class="tt-period">Invested ${startYear} · ${period}y later · ended ${endYear}</div>
+      <div class="tt-strat">${stratLabel} Final Value</div>
+      <div class="tt-bars">
+        <div class="tt-bar-row tt-bar-primary">
+          <span class="tt-bar-label">${stratLabel}</span>
+          <div class="tt-bar-track"><div class="tt-bar-fill" style="width:${w1}%"></div></div>
+          <span class="tt-bar-value">(${fmtFull(Math.round(value))})</span>
+        </div>
+        <div class="tt-bar-row">
+          <span class="tt-bar-label">vs ${baseLabel}</span>
+          <div class="tt-bar-track"><div class="tt-bar-fill" style="width:${w2}%"></div></div>
+          <span class="tt-bar-value">(${fmtFull(Math.round(baselineVal))})</span>
+        </div>
+      </div>
+    `;
+  }
+
+  grid.addEventListener('mousemove', (e) => {
+    const cell = e.target.closest('td.heatmap-cell, th[data-r], th[data-c]');
+    if (!cell || !grid.contains(cell)) {
+      clearHighlights();
+      hideTooltip();
+      return;
+    }
+    clearHighlights();
+    applyHighlights(cell.dataset.r, cell.dataset.c);
+    if (cell.matches('td.heatmap-cell:not(.empty)') && cell.dataset.value != null) {
+      fillTooltip(cell);
+      tooltip.removeAttribute('hidden');
+      positionTooltip(cell, e);
+    } else {
+      hideTooltip();
+    }
+  });
+  grid.addEventListener('mouseleave', () => {
+    clearHighlights();
+    hideTooltip();
+  });
+})();
+
 // Called from chart.js render() after a parameter change. Debounced so the
 // expensive simulation grid only runs after the user stops adjusting.
 function refreshAnalytics() {
@@ -155,6 +281,11 @@ async function buildHeatmap() {
   renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMult, tqqqBelowMult, tqqqWindow, analyticsStrategy);
   const titleEl = document.getElementById('analytics-chart-title');
   if (titleEl) titleEl.textContent = (STRATEGY_LABELS[analyticsStrategy] || 'Adaptive') + ' — Final Value';
+  const subEl = document.querySelector('.analytics-chart-sub');
+  if (subEl) {
+    const bLabel = BASELINE_LABELS[analyticsBaseline] || 'baseline';
+    subEl.innerHTML = `rows: year you started investing &nbsp;·&nbsp; columns: N years later &nbsp;·&nbsp; cell color: log of performance against <strong>${bLabel}</strong> (1× = match, anchored at slate midpoint)`;
+  }
 
   // Year -> first/last quarter index.
   const yearFirst = new Map();
@@ -190,15 +321,17 @@ async function buildHeatmap() {
   for (const c of cells) lookup.set(c.year + ':' + c.period, c);
 
   // Render the empty skeleton up-front so cells fill in live as sims complete.
-  const headerHTML = '<tr><th></th>' + periods.map(p => `<th>${p}y</th>`).join('') + '</tr>';
+  // data-r / data-c on every cell + corresponding header drives the row+column
+  // hover highlight without per-render listener wiring.
+  const headerHTML = '<tr><th></th>' + periods.map(p => `<th data-c="${p}">${p}y</th>`).join('') + '</tr>';
   const bodyParts = [];
   for (let sy = maxYear - 1; sy >= minYear; sy--) {
-    bodyParts.push(`<tr><th>${sy}</th>`);
+    bodyParts.push(`<tr><th data-r="${sy}">${sy}</th>`);
     for (const p of periods) {
       const c = lookup.get(sy + ':' + p);
       bodyParts.push(c
-        ? `<td class="heatmap-cell" data-yp="${sy}:${p}"></td>`
-        : '<td class="heatmap-cell empty"></td>');
+        ? `<td class="heatmap-cell" data-yp="${sy}:${p}" data-r="${sy}" data-c="${p}"></td>`
+        : `<td class="heatmap-cell empty" data-r="${sy}" data-c="${p}"></td>`);
     }
     bodyParts.push('</tr>');
   }
@@ -221,15 +354,19 @@ async function buildHeatmap() {
     const c = cells[i];
     const sim = simulate(initial, monthly, rate, c.entryIdx, c.exitIdx, annualRaise, opts);
     c.value = strategyFinalValue(sim, strat);
-    // Cash-baseline divisor: same number plotted as "Invested Compounded" on
-    // the main chart. Comes from the 9sig log regardless of selected strategy.
-    const log = sim.log;
-    const baseline = log && log.length ? log[log.length - 1].investedCompounded : 0;
+    // Divisor for the diverging color scale — chosen via the baseline dropdown.
+    // Default is "Compounded Cash" (the same line plotted as "Invested
+    // Compounded" on the main chart). Other options compare against B&H SPY,
+    // QQQ, TQQQ, 9sig, or adaptive.
+    const baseline = baselineFinalValue(sim, analyticsBaseline);
     c.derived = baseline > 0 && c.value > 0 ? c.value / baseline : 0;
     const td = cellRefs.get(c.year + ':' + c.period);
     if (td) {
       const endYear = c.year + c.period - 1;
       td.innerHTML = `<span class="cell-val">${fmt3sig(c.value)}</span><span class="cell-year">${endYear}</span>`;
+      td.dataset.value = String(c.value);
+      td.dataset.derived = String(c.derived);
+      td.dataset.endYear = String(endYear);
     }
 
     if ((i + 1) % CHUNK === 0 || i === cells.length - 1) {
@@ -285,8 +422,6 @@ async function buildHeatmap() {
       b = Math.round(105 + (128 - 105) * u);
     }
     td.style.background = `rgb(${r},${g},${b})`;
-    const mult = c.derived > 0 ? c.derived.toFixed(2) + '×' : '—';
-    td.title = `Invested ${c.year}, ${c.period}y later (${c.year + c.period - 1}): ${fmtFull(Math.round(c.value))} (${mult} vs cash baseline)`;
   }
 
   progEl.setAttribute('hidden', '');

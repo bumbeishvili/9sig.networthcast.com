@@ -258,15 +258,58 @@ function toggleAdaptive() {
   window._dualRange = { updateUI, setMax, step, stopPlay };
 })();
 
-// Share: encode current sliders into URL params
+// Share: encode the full UI state into URL params so the receiver lands on
+// the exact same view. Includes sliders, adaptive strategy params, toggles,
+// envelope opacity, dataset visibility (per-line legend toggles), and the
+// analytics modal state (open + selected strategy + selected baseline).
 function shareConfig() {
+  const get = (id) => document.getElementById(id);
   const params = new URLSearchParams();
-  params.set('i', document.getElementById('slider-initial').value);
-  params.set('m', document.getElementById('slider-monthly').value);
-  params.set('a', document.getElementById('slider-raise').value);
-  params.set('r', document.getElementById('slider-rate').value);
-  params.set('e', document.getElementById('slider-entry').value);
-  params.set('x', document.getElementById('slider-exit').value);
+
+  // Core sliders (existing keys — keep stable so old links keep working)
+  params.set('i', get('slider-initial').value);
+  params.set('m', get('slider-monthly').value);
+  params.set('a', get('slider-raise').value);
+  params.set('r', get('slider-rate').value);
+  params.set('e', get('slider-entry').value);
+  params.set('x', get('slider-exit').value);
+
+  // Adaptive strategy measurement params
+  params.set('tu', get('select-tqqq-above').value);
+  params.set('td', get('select-tqqq-below').value);
+  params.set('tw', get('select-tqqq-window').value);
+
+  // Toggles
+  params.set('l',  get('toggle-log-scale').checked   ? '1' : '0');
+  params.set('ev', get('toggle-envelope').checked    ? '1' : '0');
+  params.set('bv', get('toggle-bh-envelope').checked ? '1' : '0');
+  params.set('eo', get('slider-envelope-opacity').value);
+
+  // Section open/closed state
+  params.set('vo', document.getElementById('advanced-section').classList.contains('open') ? '1' : '0');
+  params.set('ao', document.getElementById('adaptive-section').classList.contains('open') ? '1' : '0');
+
+  // Dataset visibility — captures per-line legend toggles (e.g., "I hid the
+  // adaptive line"). Only encode if at least one is hidden.
+  if (typeof chart !== 'undefined' && chart) {
+    const hidden = [];
+    chart.data.datasets.forEach((ds, i) => {
+      if (ds._isShift) return; // ignore the envelope-shift datasets
+      if (!chart.isDatasetVisible(i)) hidden.push(i);
+    });
+    if (hidden.length) params.set('hd', hidden.join(','));
+  }
+
+  // Analytics modal state
+  if (typeof isAnalyticsOpen === 'function' && isAnalyticsOpen()) {
+    params.set('am', '1');
+  }
+  if (typeof analyticsStrategy !== 'undefined' && analyticsStrategy && analyticsStrategy !== 'adaptive') {
+    params.set('as', analyticsStrategy);
+  }
+  if (typeof analyticsBaseline !== 'undefined' && analyticsBaseline && analyticsBaseline !== 'compounded') {
+    params.set('ab', analyticsBaseline);
+  }
 
   const url = window.location.origin + window.location.pathname + '?' + params.toString();
 
@@ -275,7 +318,6 @@ function shareConfig() {
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2000);
   }).catch(() => {
-    // Fallback: prompt
     prompt('Copy this link:', url);
   });
 }
