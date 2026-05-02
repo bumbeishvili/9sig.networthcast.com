@@ -244,10 +244,16 @@ function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMu
   const pct = (x) => (x * 100 % 1 === 0 ? (x * 100).toFixed(0) : (x * 100).toFixed(1)) + '%';
   const items = [
     `<span class="metric">Initial <strong>${fmtFull(initial)}</strong></span>`,
-    `<span class="metric">Monthly <strong>${fmtFull(monthly)}</strong></span>`,
-    `<span class="metric">Annual raise <strong>${pct(annualRaise)}</strong></span>`,
-    `<span class="metric">Cash rate <strong>${pct(rate)}</strong></span>`,
   ];
+  // Monthly + the two contribution-related metrics (raise / cash rate) only
+  // make sense when there are actual monthly contributions. With monthly = 0
+  // the raise is a no-op and the cash flow that earns the rate doesn't exist
+  // beyond the initial allocation, so we hide all three together.
+  if (monthly > 0) {
+    items.push(`<span class="metric">Monthly <strong>${fmtFull(monthly)}</strong></span>`);
+    items.push(`<span class="metric">Annual raise <strong>${pct(annualRaise)}</strong></span>`);
+    items.push(`<span class="metric">Cash interest rate <strong>${pct(rate)}</strong></span>`);
+  }
   if (strategy === 'adaptive') {
     items.push(`<span class="metric">→ 9sig <strong>×${tqqqAboveMult}</strong></span>`);
     items.push(`<span class="metric">→ TQQQ <strong>×${tqqqBelowMult}</strong></span>`);
