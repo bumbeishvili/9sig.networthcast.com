@@ -624,6 +624,27 @@
     color: var(--text);
     white-space: nowrap;
   }
+  .heatmap-tooltip .tt-foot {
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(100, 116, 139, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 10px;
+  }
+  .heatmap-tooltip .tt-foot > span:first-child {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: 600;
+  }
+  .heatmap-tooltip .tt-dd {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--red);
+  }
 
   .dual-range {
     position: relative;

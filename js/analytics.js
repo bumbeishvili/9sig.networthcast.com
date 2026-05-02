@@ -78,6 +78,36 @@ function strategyFinalValue(sim, strat) {
   }
 }
 
+// Extract the per-quarter value series of a strategy from a simulate() result.
+// Used to compute max drawdown.
+function strategySeries(sim, strat) {
+  switch (strat) {
+    case '9sig':     return sim.log           ? sim.log.map(l => l.total)            : [];
+    case 'bh-tqqq':  return sim.bhPoints      ? sim.bhPoints.map(p => p.value)       : [];
+    case 'bh-qqq':   return sim.qqqPoints     ? sim.qqqPoints.map(p => p.value)      : [];
+    case 'bh-spy':   return sim.spyPoints     ? sim.spyPoints.map(p => p.value)      : [];
+    case 'adaptive':
+    default:         return sim.adaptivePoints? sim.adaptivePoints.map(p => p.value) : [];
+  }
+}
+
+// Max drawdown of a value series: largest peak-to-trough decline expressed as
+// a positive fraction (e.g. 0.42 = 42%). Returns 0 for monotonically growing
+// series like the cash-only baseline.
+function computeMaxDrawdown(series) {
+  if (!series || series.length < 2) return 0;
+  let peak = -Infinity, maxDD = 0;
+  for (const v of series) {
+    if (!Number.isFinite(v)) continue;
+    if (v > peak) peak = v;
+    if (peak > 0) {
+      const dd = (peak - v) / peak;
+      if (dd > maxDD) maxDD = dd;
+    }
+  }
+  return maxDD;
+}
+
 // 3 significant figures, with K/M/B suffix. No currency symbol.
 function fmt3sig(n) {
   if (!Number.isFinite(n) || n === 0) return '0';
@@ -183,12 +213,14 @@ document.addEventListener('change', (e) => {
     const endYear   = +td.dataset.endYear;
     const value     = +td.dataset.value;
     const derived   = +td.dataset.derived;
+    const maxDD     = +td.dataset.maxDd;
     const baselineVal = derived > 0 ? value / derived : 0;
     const stratLabel = STRATEGY_LABELS[analyticsStrategy] || 'Adaptive';
     const baseLabel  = BASELINE_LABELS[analyticsBaseline] || 'Baseline';
     const maxV = Math.max(value, baselineVal) || 1;
     const w1 = (value / maxV * 100).toFixed(1);
     const w2 = (baselineVal / maxV * 100).toFixed(1);
+    const ddStr = Number.isFinite(maxDD) && maxDD > 0 ? '−' + (maxDD * 100).toFixed(1) + '%' : '0.0%';
     tooltip.innerHTML = `
       <div class="tt-period">Invested ${startYear} · ${period}y later · ended ${endYear}</div>
       <div class="tt-strat">${stratLabel} Final Value</div>
@@ -203,6 +235,10 @@ document.addEventListener('change', (e) => {
           <div class="tt-bar-track"><div class="tt-bar-fill" style="width:${w2}%"></div></div>
           <span class="tt-bar-value">(${fmtFull(Math.round(baselineVal))})</span>
         </div>
+      </div>
+      <div class="tt-foot">
+        <span>Max drawdown</span>
+        <span class="tt-dd">${ddStr}</span>
       </div>
     `;
   }
@@ -366,6 +402,7 @@ async function buildHeatmap() {
     // QQQ, TQQQ, 9sig, or adaptive.
     const baseline = baselineFinalValue(sim, analyticsBaseline);
     c.derived = baseline > 0 && c.value > 0 ? c.value / baseline : 0;
+    c.maxDD = computeMaxDrawdown(strategySeries(sim, strat));
     const td = cellRefs.get(c.year + ':' + c.period);
     if (td) {
       const endYear = c.year + c.period - 1;
@@ -373,6 +410,7 @@ async function buildHeatmap() {
       td.dataset.value = String(c.value);
       td.dataset.derived = String(c.derived);
       td.dataset.endYear = String(endYear);
+      td.dataset.maxDd = String(c.maxDD);
     }
 
     if ((i + 1) % CHUNK === 0 || i === cells.length - 1) {
