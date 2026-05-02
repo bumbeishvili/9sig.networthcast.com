@@ -412,20 +412,25 @@ async function buildHeatmap() {
       }
     }
     intensity = Math.max(0, Math.min(1, intensity));
-    // Diverging red → slate → green. Stops match the app's existing red
-    // (#f87171, B&H TQQQ) and green (#4ade80, B&H QQQ). Midpoint is a neutral
-    // slate (#475569) so middle cells read as "just middle", not red or green.
+    // Diverging palette: red-500 (#ef4444) → slate-600 (#475569) → green-500
+    // (#22c55e). Pre-apply a sqrt-based curve so small deviations from the
+    // 0.5 midpoint produce strong visible color shifts — "slight red" and
+    // "slight green" cells are now clearly distinguishable from each other
+    // and from the neutral midpoint.
+    const delta = intensity - 0.5;
+    const curvedDelta = Math.sign(delta) * Math.pow(Math.abs(delta) * 2, 0.5) * 0.5;
+    const t = 0.5 + curvedDelta;
     let r, g, b;
-    if (intensity < 0.5) {
-      const u = intensity * 2;
-      r = Math.round(248 + (71  - 248) * u);
-      g = Math.round(113 + (85  - 113) * u);
-      b = Math.round(113 + (105 - 113) * u);
+    if (t < 0.5) {
+      const u = t * 2;
+      r = Math.round(239 + (71  - 239) * u);
+      g = Math.round(68  + (85  - 68)  * u);
+      b = Math.round(68  + (105 - 68)  * u);
     } else {
-      const u = (intensity - 0.5) * 2;
-      r = Math.round(71  + (74  - 71)  * u);
-      g = Math.round(85  + (222 - 85)  * u);
-      b = Math.round(105 + (128 - 105) * u);
+      const u = (t - 0.5) * 2;
+      r = Math.round(71  + (34  - 71)  * u);
+      g = Math.round(85  + (197 - 85)  * u);
+      b = Math.round(105 + (94  - 105) * u);
     }
     td.style.background = `rgb(${r},${g},${b})`;
   }
