@@ -235,11 +235,9 @@
   .modal-content {
     position: relative;
     background: var(--surface);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
     width: 100vw;
-    max-height: 96vh;
+    height: 100vh;
+    max-height: 100vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
