@@ -573,6 +573,12 @@
     color: var(--text-muted);
     margin-bottom: 4px;
   }
+  .heatmap-tooltip .tt-scenario {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
   .heatmap-tooltip .tt-strat {
     font-weight: 600;
     color: var(--accent);

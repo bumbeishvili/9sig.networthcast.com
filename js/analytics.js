@@ -221,8 +221,30 @@ document.addEventListener('change', (e) => {
     const w1 = (value / maxV * 100).toFixed(1);
     const w2 = (baselineVal / maxV * 100).toFixed(1);
     const ddStr = Number.isFinite(maxDD) && maxDD > 0 ? '−' + (maxDD * 100).toFixed(1) + '%' : '0.0%';
+
+    // Investment scenario — pulled live from the sliders so the tooltip
+    // always reflects the params currently driving the heatmap. Hides any
+    // line item that's at zero/default to keep the line short.
+    const initial = sliderToInitial(+document.getElementById('slider-initial').value);
+    const monthly = +document.getElementById('slider-monthly').value;
+    const annualRaise = +document.getElementById('slider-raise').value / 100;
+    const scenarioParts = [];
+    if (initial > 0) scenarioParts.push(`Initial ${fmtFull(initial)}`);
+    if (monthly > 0) {
+      let m = `Monthly ${fmtFull(monthly)}`;
+      if (annualRaise > 0) m += ` (${(annualRaise * 100).toFixed(annualRaise * 100 % 1 === 0 ? 0 : 1)}%/y raise)`;
+      scenarioParts.push(m);
+    }
+    if (analyticsStrategy === 'adaptive') {
+      const tu = document.getElementById('select-tqqq-above').value;
+      const td2 = document.getElementById('select-tqqq-below').value;
+      const tw = document.getElementById('select-tqqq-window').value;
+      scenarioParts.push(`→9sig ×${tu} · →TQQQ ×${td2} · ${tw}y window`);
+    }
+
     tooltip.innerHTML = `
       <div class="tt-period">Invested ${startYear} · ${period}y later · ended ${endYear}</div>
+      <div class="tt-scenario">${scenarioParts.join(' &middot; ')}</div>
       <div class="tt-strat">${stratLabel} Final Value</div>
       <div class="tt-bars">
         <div class="tt-bar-row tt-bar-primary">
