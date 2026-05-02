@@ -413,7 +413,7 @@
     box-sizing: border-box;
     text-align: center;
     padding: 0 2px;
-    height: 18px;
+    height: 26px;
     width: 38px;
     min-width: 38px;
     max-width: 38px;
@@ -451,9 +451,25 @@
     min-width: 44px;
     max-width: 44px;
   }
+  .heatmap-table td.heatmap-cell {
+    position: relative;
+  }
   .heatmap-table td.heatmap-cell.empty {
     background: transparent;
     color: rgba(100,116,139,0.4);
+  }
+  .heatmap-table .cell-val {
+    display: block;
+    transform: translateY(-3px);
+  }
+  .heatmap-table .cell-year {
+    position: absolute;
+    bottom: 1px;
+    right: 2px;
+    font-size: 8px;
+    line-height: 1;
+    opacity: 0.55;
+    pointer-events: none;
   }
 
   .dual-range {

@@ -112,19 +112,22 @@ function refreshAnalytics() {
   analyticsRefreshTimer = setTimeout(buildHeatmap, 300);
 }
 
-function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMult, tqqqBelowMult, tqqqWindow) {
+function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMult, tqqqBelowMult, tqqqWindow, strategy) {
   const m = document.getElementById('analytics-metrics');
   if (!m) return;
   const pct = (x) => (x * 100 % 1 === 0 ? (x * 100).toFixed(0) : (x * 100).toFixed(1)) + '%';
-  m.innerHTML = [
+  const items = [
     `<span class="metric">Initial <strong>${fmtFull(initial)}</strong></span>`,
     `<span class="metric">Monthly <strong>${fmtFull(monthly)}</strong></span>`,
     `<span class="metric">Annual raise <strong>${pct(annualRaise)}</strong></span>`,
     `<span class="metric">Cash rate <strong>${pct(rate)}</strong></span>`,
-    `<span class="metric">→ 9sig <strong>×${tqqqAboveMult}</strong></span>`,
-    `<span class="metric">→ TQQQ <strong>×${tqqqBelowMult}</strong></span>`,
-    `<span class="metric">Window <strong>${tqqqWindow}y</strong></span>`,
-  ].join('');
+  ];
+  if (strategy === 'adaptive') {
+    items.push(`<span class="metric">→ 9sig <strong>×${tqqqAboveMult}</strong></span>`);
+    items.push(`<span class="metric">→ TQQQ <strong>×${tqqqBelowMult}</strong></span>`);
+    items.push(`<span class="metric">Window <strong>${tqqqWindow}y</strong></span>`);
+  }
+  m.innerHTML = items.join('');
 }
 
 async function buildHeatmap() {
@@ -149,7 +152,7 @@ async function buildHeatmap() {
   const adaptiveStates = computeAdaptiveStates(switchTo9sig, switchToAllIn, tqqqWindow);
   const opts = { switchTo9sig, switchToAllIn, yearsBack: tqqqWindow, adaptiveStates };
 
-  renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMult, tqqqBelowMult, tqqqWindow);
+  renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMult, tqqqBelowMult, tqqqWindow, analyticsStrategy);
   const titleEl = document.getElementById('analytics-chart-title');
   if (titleEl) titleEl.textContent = (STRATEGY_LABELS[analyticsStrategy] || 'Adaptive') + ' — Final Value';
 
@@ -224,7 +227,10 @@ async function buildHeatmap() {
     const baseline = log && log.length ? log[log.length - 1].investedCompounded : 0;
     c.derived = baseline > 0 && c.value > 0 ? c.value / baseline : 0;
     const td = cellRefs.get(c.year + ':' + c.period);
-    if (td) td.textContent = fmt3sig(c.value);
+    if (td) {
+      const endYear = c.year + c.period - 1;
+      td.innerHTML = `<span class="cell-val">${fmt3sig(c.value)}</span><span class="cell-year">${endYear}</span>`;
+    }
 
     if ((i + 1) % CHUNK === 0 || i === cells.length - 1) {
       const pct = ((i + 1) / cells.length) * 100;
