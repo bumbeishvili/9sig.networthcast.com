@@ -485,7 +485,7 @@
     color: var(--text-muted);
     font-weight: 600;
     font-size: 8px;
-    z-index: 2;
+    z-index: 5;
   }
   .heatmap-table tbody th {
     position: sticky;
@@ -497,11 +497,11 @@
     width: 44px;
     min-width: 44px;
     max-width: 44px;
-    z-index: 1;
+    z-index: 5;
   }
   .heatmap-table thead th:first-child {
     left: 0;
-    z-index: 3;
+    z-index: 6;
     width: 44px;
     min-width: 44px;
     max-width: 44px;
@@ -526,15 +526,20 @@
     opacity: 0.55;
     pointer-events: none;
   }
-  /* Hover cross-highlight: row + column outline in cyan, intersection brighter. */
-  .heatmap-table .row-hover,
-  .heatmap-table .col-hover {
+  /* Hover cross-highlight: outline only on body cells (td). The position:relative
+     here would override position:sticky on header th cells if applied to them,
+     so the sticky thead/tbody header rules above keep their place. Sticky
+     z-indices (5/5/6) sit well above the hover stacking range (1-2) so when
+     a highlighted cell scrolls beneath the sticky row/column, the header
+     covers it cleanly. */
+  .heatmap-table td.row-hover,
+  .heatmap-table td.col-hover {
     outline: 1px solid rgba(34, 211, 238, 0.45);
     outline-offset: -1px;
     position: relative;
     z-index: 1;
   }
-  .heatmap-table .row-hover.col-hover {
+  .heatmap-table td.row-hover.col-hover {
     outline-color: rgba(34, 211, 238, 0.95);
     z-index: 2;
   }
@@ -939,10 +944,11 @@
   }
 
   #share-toast {
-    position: absolute;
-    top: 36px;
-    right: 0;
-    padding: 6px 14px;
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 300;
+    padding: 8px 16px;
     background: var(--green);
     color: var(--bg);
     font-size: 12px;
@@ -950,8 +956,9 @@
     border-radius: 6px;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s;
+    transition: opacity 0.25s;
     white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   }
 
   #share-toast.show {
