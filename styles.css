@@ -478,6 +478,20 @@
     border-right: 1px solid rgba(30,42,63,0.4);
     border-bottom: 1px solid rgba(30,42,63,0.4);
   }
+  /* Force thead and tbody to be sibling stacking contexts. With position:
+     relative and explicit z-index on the row groups themselves, everything
+     painted inside thead automatically wins over everything inside tbody —
+     no matter what individual cells try to do with their own z-index. This
+     fixes the case where scrolled tbody cells (cell-year span, etc.) leaked
+     on top of the sticky thead row. */
+  .heatmap-table thead {
+    position: relative;
+    z-index: 2;
+  }
+  .heatmap-table tbody {
+    position: relative;
+    z-index: 1;
+  }
   .heatmap-table thead th {
     position: sticky;
     top: 0;
@@ -508,6 +522,7 @@
   }
   .heatmap-table td.heatmap-cell {
     position: relative;
+    z-index: 0;
   }
   .heatmap-table td.heatmap-cell.empty {
     background: transparent;

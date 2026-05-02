@@ -34,7 +34,7 @@
     selBelow.insertAdjacentHTML('beforeend', `<option value="${x}">${x}</option>`);
   }
   selAbove.value = '1.5';
-  selBelow.value = '1.0';
+  selBelow.value = '1.2';
   for (let y = 1; y <= 30; y++) {
     selWindow.insertAdjacentHTML('beforeend', `<option value="${y}">${y}</option>`);
   }

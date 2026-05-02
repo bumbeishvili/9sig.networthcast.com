@@ -367,15 +367,23 @@ async function buildHeatmap() {
   for (let p = 1; p <= ANALYTICS_MAX_PERIOD && p <= (maxYear - minYear); p++) periods.push(p);
 
   // Build the list of valid (startYear, period) cells. The row is the year
-  // you started investing; the column is "N years later". A cell exists iff
-  // startYear + period - 1 falls within the available data range.
+  // you started investing; the column is "N years later". Entry anchors at
+  // the *last trading day of the previous year* — that's effectively the
+  // first close of the starting year, matching what a normal person means by
+  // "I invested at the start of 2025". (Previously we used the Q1-end of the
+  // starting year, which silently lopped off the first 3 months of returns.)
+  // For the earliest year in the dataset (no prior year exists), fall back
+  // to the first quarter of the starting year.
   const cells = [];
   for (let sy = maxYear - 1; sy >= minYear; sy--) {
     for (const p of periods) {
       const endYear = sy + p - 1;
       if (endYear > maxYear) continue;
-      if (!yearFirst.has(sy) || !yearLast.has(endYear)) continue;
-      const entryIdx = yearFirst.get(sy);
+      if (!yearLast.has(endYear)) continue;
+      const entryIdx = (sy > minYear && yearLast.has(sy - 1))
+        ? yearLast.get(sy - 1)
+        : yearFirst.get(sy);
+      if (entryIdx == null) continue;
       const exitIdx  = yearLast.get(endYear);
       if (exitIdx - entryIdx < 2) continue;
       cells.push({ year: sy, period: p, entryIdx, exitIdx, value: 0 });
