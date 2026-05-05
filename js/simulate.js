@@ -34,9 +34,9 @@ function trailingShadowRatio(globalIdx, yearsBack) {
   if (!startPrice || !endPrice) return null;
   const bhValue = endPrice / startPrice;
 
-  let cash = 0.3;
-  let shares = 0.7 / startPrice;
-  let signal = 0.7;
+  let cash = 0.4;
+  let shares = 0.6 / startPrice;
+  let signal = 0.6;
   for (let t = start + 1; t <= globalIdx; t++) {
     const p = quarterlyData[t][1];
     signal *= 1.09;
@@ -90,10 +90,12 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   const qSlice = qData.slice(entryIdx, exitIdx + 1);
   if (qSlice.length < 2) return { log: [], bhPoints: [], qqqPoints: [], totalContributed: initial };
 
-  // Initial 70/30 allocation: 70% TQQQ, 30% cash/bond
-  let cash = initial * 0.3;
-  let tqqqShares = (initial * 0.7) / qSlice[0][1];
-  let signalLine = initial * 0.7; // target TQQQ value starts at initial TQQQ allocation
+  // Initial 60/40 allocation: 60% TQQQ, 40% cash. Matches the canonical 9Sig
+  // "base reset" mix; we keep the 40% in cash earning the configured rate
+  // (instead of a bond fund) per the simulator's design.
+  let cash = initial * 0.4;
+  let tqqqShares = (initial * 0.6) / qSlice[0][1];
+  let signalLine = initial * 0.6; // target TQQQ value starts at initial TQQQ allocation
   let totalInvested = initial;
   let investedCompounded = initial;
   let currentMonthly = monthly;
@@ -182,6 +184,25 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
         action = 'HOLD';
       }
 
+      // Spike reset rule: if TQQQ at least doubled this quarter AND the post-
+      // rebalance stock allocation is still 60–100% AND we're not in a 30-down
+      // no-sell period, force the stock fund back to a 60% allocation. This
+      // is the canonical 9Sig "spike reset" — a hard profit-take when a big
+      // upmove leaves the leveraged fund still dominating the portfolio.
+      const prevTqqqPrice = qSlice[qi - 1][1];
+      const quarterlyTqqqGain = prevTqqqPrice > 0 ? (qPrice - prevTqqqPrice) / prevTqqqPrice : 0;
+      const postTqqqVal = tqqqShares * qPrice;
+      const postTotal   = postTqqqVal + cash;
+      const postAlloc   = postTotal > 0 ? postTqqqVal / postTotal : 0;
+      if (quarterlyTqqqGain >= 1.0 && postAlloc >= 0.60 && postAlloc <= 1.0 && !inCrashZone) {
+        const targetTqqqVal = postTotal * 0.60;
+        const reduceBy = postTqqqVal - targetTqqqVal;
+        tqqqShares = targetTqqqVal / qPrice;
+        cash       = postTotal - targetTqqqVal;
+        signalLine = targetTqqqVal;
+        action = 'RESET ' + fmt(reduceBy) + ' (spike)';
+      }
+
       const tqqqVal = tqqqShares * qPrice;
       // Reset signal line to actual TQQQ value after rebalancing if we couldn't close the gap
       if (tqqqVal < signalLine) signalLine = tqqqVal;
@@ -266,9 +287,9 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   let aState = adaptiveStates[entryIdx];
   let aCash, aShares, aSignal;
   if (aState === '9sig') {
-    aCash   = initial * 0.3;
-    aShares = (initial * 0.7) / qSlice[0][1];
-    aSignal = initial * 0.7;
+    aCash   = initial * 0.4;
+    aShares = (initial * 0.6) / qSlice[0][1];
+    aSignal = initial * 0.6;
   } else {
     aCash   = 0;
     aShares = initial / qSlice[0][1];
@@ -300,9 +321,9 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       if (newState !== aState) {
         if (newState === '9sig') {
           const tv = aShares * qPrice;
-          aCash = tv * 0.3;
-          aShares = (tv * 0.7) / qPrice;
-          aSignal = tv * 0.7;
+          aCash = tv * 0.4;
+          aShares = (tv * 0.6) / qPrice;
+          aSignal = tv * 0.6;
         } else {
           aShares += aCash / qPrice;
           aCash = 0;
@@ -343,6 +364,18 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
           aCash -= buy;
         } else {
           aCrashCount = 0;
+        }
+        // Spike reset: same canonical 9Sig rule as the main leg.
+        const aPrevTqqqPrice = qSlice[qi - 1][1];
+        const aQuarterGain = aPrevTqqqPrice > 0 ? (qPrice - aPrevTqqqPrice) / aPrevTqqqPrice : 0;
+        const aPostTqqqVal = aShares * qPrice;
+        const aPostTotal   = aPostTqqqVal + aCash;
+        const aPostAlloc   = aPostTotal > 0 ? aPostTqqqVal / aPostTotal : 0;
+        if (aQuarterGain >= 1.0 && aPostAlloc >= 0.60 && aPostAlloc <= 1.0 && !inCrashZoneA) {
+          const target = aPostTotal * 0.60;
+          aShares = target / qPrice;
+          aCash   = aPostTotal - target;
+          aSignal = target;
         }
         const ntv = aShares * qPrice;
         if (ntv < aSignal) aSignal = ntv;
