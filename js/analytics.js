@@ -24,6 +24,7 @@ const STRATEGY_LABELS = {
 
 let analyticsStrategy = 'adaptive';
 let analyticsBaseline = 'compounded';
+let analyticsCustomTarget = 1000000; // default $1M when "Custom Target" is selected
 let analyticsBuildEpoch = 0;
 let analyticsRefreshTimer = null;
 
@@ -34,13 +35,26 @@ const BASELINE_LABELS = {
   'adaptive':   'Adaptive',
   '9sig':       '9sig',
   'bh-tqqq':    'B&H TQQQ',
+  'custom':     'Custom Target',
 };
+
+// Parse user-entered amounts like "$1M", "1m", "100k", "$1,000,000", "10000".
+function parseAmount(str) {
+  if (typeof str !== 'string') return NaN;
+  const cleaned = str.replace(/[$,\s]/g, '').trim();
+  if (!cleaned) return NaN;
+  const m = cleaned.match(/^([\d.]+)\s*([kKmMbB])?$/);
+  if (!m) return NaN;
+  const mult = m[2] ? { k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()] : 1;
+  return parseFloat(m[1]) * mult;
+}
 
 // Pull a baseline value out of a simulate() result for the chosen divisor.
 // 'compounded' is the cash-only baseline plotted as "Invested Compounded";
 // the others mirror strategyFinalValue.
 function baselineFinalValue(sim, key) {
   switch (key) {
+    case 'custom':    return analyticsCustomTarget;
     case '9sig':      { const a = sim.log;           return a && a.length ? a[a.length - 1].total : 0; }
     case 'bh-tqqq':   { const a = sim.bhPoints;      return a && a.length ? a[a.length - 1].value : 0; }
     case 'bh-qqq':    { const a = sim.qqqPoints;     return a && a.length ? a[a.length - 1].value : 0; }
@@ -163,8 +177,59 @@ document.addEventListener('click', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'analytics-baseline') {
     analyticsBaseline = e.target.value;
+    const customInput = document.getElementById('analytics-baseline-custom-input');
+    if (customInput) {
+      if (analyticsBaseline === 'custom') {
+        customInput.removeAttribute('hidden');
+        customInput.value = fmtFull(analyticsCustomTarget);
+      } else {
+        customInput.setAttribute('hidden', '');
+      }
+    }
     buildHeatmap();
   }
+});
+
+// Custom-target input: parse + rebuild on change/blur.
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'analytics-baseline-custom-input') {
+    const v = parseAmount(e.target.value);
+    if (Number.isFinite(v) && v > 0) {
+      analyticsCustomTarget = v;
+      e.target.value = fmtFull(v); // re-format to canonical
+      buildHeatmap();
+    }
+  }
+});
+
+// Metric dropdowns inside the modal — change feeds back to the underlying
+// page slider/select, dispatches the appropriate event so the main chart
+// updates and localStorage saves, then rebuilds the heatmap.
+document.addEventListener('change', (e) => {
+  if (!e.target || !e.target.classList || !e.target.classList.contains('metric-select')) return;
+  const key = e.target.dataset.metricKey;
+  const value = parseFloat(e.target.value);
+  if (!Number.isFinite(value)) return;
+  const fireInput = (id, sliderValue) => {
+    const el = document.getElementById(id);
+    el.value = String(sliderValue);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const fireChange = (id, val) => {
+    const el = document.getElementById(id);
+    el.value = String(val);
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  switch (key) {
+    case 'initial': fireInput('slider-initial', initialToSlider(value)); break;
+    case 'monthly': fireInput('slider-monthly', value); break;
+    case 'raise':   fireInput('slider-raise',   value); break;
+    case 'rate':    fireInput('slider-rate',    value); break;
+    case 'tu':      fireChange('select-tqqq-above',  value); break;
+    case 'td':      fireChange('select-tqqq-below',  value); break;
+    case 'tw':      fireChange('select-tqqq-window', value); break;
+  }
+  buildHeatmap();
 });
 
 // Cross-hair hover: highlight the row + column of the hovered cell, and show
@@ -216,7 +281,9 @@ document.addEventListener('change', (e) => {
     const maxDD     = +td.dataset.maxDd;
     const baselineVal = derived > 0 ? value / derived : 0;
     const stratLabel = STRATEGY_LABELS[analyticsStrategy] || 'Adaptive';
-    const baseLabel  = BASELINE_LABELS[analyticsBaseline] || 'Baseline';
+    const baseLabel  = analyticsBaseline === 'custom'
+      ? `Target ${fmtFull(analyticsCustomTarget)}`
+      : (BASELINE_LABELS[analyticsBaseline] || 'Baseline');
     const maxV = Math.max(value, baselineVal) || 1;
     const w1 = (value / maxV * 100).toFixed(1);
     const w2 = (baselineVal / maxV * 100).toFixed(1);
@@ -296,26 +363,50 @@ function refreshAnalytics() {
   analyticsRefreshTimer = setTimeout(buildHeatmap, 300);
 }
 
+// Common dropdown options per metric. The current value is always inserted
+// into the option list (sorted) if it isn't already there, so any value the
+// user has set on the page sliders shows up correctly even if it's not in
+// the canonical list.
+const METRIC_OPTS = {
+  initial: [0, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000],
+  monthly: [0, 100, 250, 500, 1000, 2000, 5000, 10000, 25000],
+  raise:   [0, 1, 2, 3, 5, 7, 10, 15],
+  rate:    [0, 1, 2, 3, 4, 5, 6, 8],
+  tu:      [1.0, 1.2, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0, 4.0, 5.0],
+  td:      [1.0, 1.1, 1.2, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0],
+  tw:      [1, 2, 3, 5, 6, 8, 10, 12, 15, 20, 25, 30],
+};
+
+function metricSelect(key, label, current, fmt) {
+  const base = METRIC_OPTS[key].slice();
+  if (!base.some(v => Math.abs(v - current) < 1e-9)) base.push(current);
+  base.sort((a, b) => a - b);
+  const optionsHtml = base.map(v =>
+    `<option value="${v}"${Math.abs(v - current) < 1e-9 ? ' selected' : ''}>${fmt(v)}</option>`
+  ).join('');
+  return `<span class="metric">${label} <select class="metric-select" data-metric-key="${key}">${optionsHtml}</select></span>`;
+}
+
 function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMult, tqqqBelowMult, tqqqWindow, strategy) {
   const m = document.getElementById('analytics-metrics');
   if (!m) return;
-  const pct = (x) => (x * 100 % 1 === 0 ? (x * 100).toFixed(0) : (x * 100).toFixed(1)) + '%';
-  const items = [
-    `<span class="metric">Initial <strong>${fmtFull(initial)}</strong></span>`,
-  ];
-  // Monthly + the two contribution-related metrics (raise / cash rate) only
-  // make sense when there are actual monthly contributions. With monthly = 0
-  // the raise is a no-op and the cash flow that earns the rate doesn't exist
-  // beyond the initial allocation, so we hide all three together.
-  if (monthly > 0) {
-    items.push(`<span class="metric">Monthly <strong>${fmtFull(monthly)}</strong></span>`);
-    items.push(`<span class="metric">Annual raise <strong>${pct(annualRaise)}</strong></span>`);
-    items.push(`<span class="metric">Cash interest rate <strong>${pct(rate)}</strong></span>`);
-  }
+  const pct = (x) => (x % 1 === 0 ? x.toFixed(0) : x.toFixed(1)) + '%';
+  const items = [];
+  // Hide each pill when its value can't influence the result:
+  //   - Initial:           hide when 0
+  //   - Monthly:           hide when 0 (and the raise pill, since raise scales monthly)
+  //   - Annual raise:      hide when 0 OR when monthly = 0 (no contributions to scale)
+  //   - Cash interest rate: hide for B&H strategies (no cash held) and when no cash flow
+  //                         (monthly = 0 AND initial = 0)
+  const usesCash = (strategy === '9sig' || strategy === 'adaptive');
+  if (initial > 0)                       items.push(metricSelect('initial', 'Initial', initial, fmtFull));
+  if (monthly > 0)                       items.push(metricSelect('monthly', 'Monthly', monthly, fmtFull));
+  if (monthly > 0 && annualRaise > 0)    items.push(metricSelect('raise',   'Annual raise', annualRaise * 100, pct));
+  if (usesCash && (initial > 0 || monthly > 0)) items.push(metricSelect('rate', 'Cash interest rate', rate * 100, pct));
   if (strategy === 'adaptive') {
-    items.push(`<span class="metric">→ 9sig <strong>×${tqqqAboveMult}</strong></span>`);
-    items.push(`<span class="metric">→ TQQQ <strong>×${tqqqBelowMult}</strong></span>`);
-    items.push(`<span class="metric">Window <strong>${tqqqWindow}y</strong></span>`);
+    items.push(metricSelect('tu', '→ 9sig', tqqqAboveMult, x => `×${x}`));
+    items.push(metricSelect('td', '→ TQQQ', tqqqBelowMult, x => `×${x}`));
+    items.push(metricSelect('tw', 'Window', tqqqWindow,   x => `${x}y`));
   }
   m.innerHTML = items.join('');
 }
@@ -347,7 +438,9 @@ async function buildHeatmap() {
   if (titleEl) titleEl.textContent = (STRATEGY_LABELS[analyticsStrategy] || 'Adaptive') + ' — Final Value';
   const subEl = document.querySelector('.analytics-chart-sub');
   if (subEl) {
-    const bLabel = BASELINE_LABELS[analyticsBaseline] || 'baseline';
+    const bLabel = analyticsBaseline === 'custom'
+      ? `Custom Target (${fmtFull(analyticsCustomTarget)})`
+      : (BASELINE_LABELS[analyticsBaseline] || 'baseline');
     subEl.innerHTML = `rows: year you started investing &nbsp;·&nbsp; columns: N years later &nbsp;·&nbsp; cell color: log of performance against <strong>${bLabel}</strong> (1× = match, anchored at slate midpoint)`;
   }
 
@@ -480,25 +573,33 @@ async function buildHeatmap() {
       }
     }
     intensity = Math.max(0, Math.min(1, intensity));
-    // Diverging palette: red-500 (#ef4444) → slate-600 (#475569) → green-500
-    // (#22c55e). Pre-apply a sqrt-based curve so small deviations from the
-    // 0.5 midpoint produce strong visible color shifts — "slight red" and
-    // "slight green" cells are now clearly distinguishable from each other
-    // and from the neutral midpoint.
-    const delta = intensity - 0.5;
-    const curvedDelta = Math.sign(delta) * Math.pow(Math.abs(delta) * 2, 0.5) * 0.5;
-    const t = 0.5 + curvedDelta;
     let r, g, b;
-    if (t < 0.5) {
-      const u = t * 2;
-      r = Math.round(239 + (71  - 239) * u);
-      g = Math.round(68  + (85  - 68)  * u);
-      b = Math.round(68  + (105 - 68)  * u);
+    if (analyticsBaseline === 'custom') {
+      // Binary mode for "Custom Target": flat green if the cell hit the goal,
+      // flat red if not. No gradient — the question is binary ("did I get
+      // there?") so the color should be too.
+      if (c.value >= analyticsCustomTarget) { r = 34;  g = 197; b = 94;  } // #22c55e
+      else                                  { r = 239; g = 68;  b = 68;  } // #ef4444
     } else {
-      const u = (t - 0.5) * 2;
-      r = Math.round(71  + (34  - 71)  * u);
-      g = Math.round(85  + (197 - 85)  * u);
-      b = Math.round(105 + (94  - 105) * u);
+      // Diverging palette: red-500 (#ef4444) → slate-600 (#475569) → green-500
+      // (#22c55e). Pre-apply a sqrt-based curve so small deviations from the
+      // 0.5 midpoint produce strong visible color shifts — "slight red" and
+      // "slight green" cells are clearly distinguishable from each other
+      // and from the neutral midpoint.
+      const delta = intensity - 0.5;
+      const curvedDelta = Math.sign(delta) * Math.pow(Math.abs(delta) * 2, 0.5) * 0.5;
+      const t = 0.5 + curvedDelta;
+      if (t < 0.5) {
+        const u = t * 2;
+        r = Math.round(239 + (71  - 239) * u);
+        g = Math.round(68  + (85  - 68)  * u);
+        b = Math.round(68  + (105 - 68)  * u);
+      } else {
+        const u = (t - 0.5) * 2;
+        r = Math.round(71  + (34  - 71)  * u);
+        g = Math.round(85  + (197 - 85)  * u);
+        b = Math.round(105 + (94  - 105) * u);
+      }
     }
     td.style.background = `rgb(${r},${g},${b})`;
   }
