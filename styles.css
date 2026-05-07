@@ -57,6 +57,26 @@
     .layout { grid-template-columns: 1fr; }
   }
 
+  .site-footer {
+    max-width: 1200px;
+    margin: 32px auto 24px;
+    padding: 0 24px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .site-footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(100, 116, 139, 0.4);
+    padding-bottom: 1px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .site-footer a:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
   .panel {
     background: var(--surface);
     border: 1px solid var(--border);
