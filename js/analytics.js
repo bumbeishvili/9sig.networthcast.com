@@ -160,6 +160,99 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && isAnalyticsOpen()) toggleAnalytics();
 });
 
+// Snapshot the analytics chart (header + full grid) and download as PNG.
+// Two complications handled:
+//  1. The grid lives inside nested flex/scroll containers — every level needs
+//     `overflow: visible` and unbounded sizing to expose the full content.
+//  2. html2canvas renders native <select> controls inconsistently (text shifts
+//     down). We swap each select for a styled <strong> showing the selected
+//     option's text just for the duration of the capture, then restore.
+async function downloadAnalytics() {
+  if (typeof html2canvas !== 'function') {
+    alert('Image library still loading — please try again in a moment.');
+    return;
+  }
+  const target = document.querySelector('#analytics-modal .analytics-chart');
+  if (!target) return;
+
+  const expandTargets = [
+    document.querySelector('#analytics-modal .modal-content'),
+    document.querySelector('#analytics-modal .modal-body'),
+    target,
+    document.getElementById('analytics-heatmap'),
+  ].filter(Boolean);
+  const origStyles = expandTargets.map(el => ({
+    el,
+    overflow:  el.style.overflow,
+    maxHeight: el.style.maxHeight,
+    height:    el.style.height,
+    flex:      el.style.flex,
+  }));
+  expandTargets.forEach(el => {
+    el.style.overflow  = 'visible';
+    el.style.maxHeight = 'none';
+    el.style.height    = 'auto';
+    el.style.flex      = '0 0 auto';
+  });
+
+  // Swap each <select> for a <strong> with the selected option's display text.
+  const selectSwaps = [];
+  target.querySelectorAll('select').forEach(sel => {
+    const opt = sel.options[sel.selectedIndex];
+    const repl = document.createElement('strong');
+    repl.textContent = opt ? opt.text : sel.value;
+    repl.style.cssText = 'color: var(--text); font-weight: 600; font-family: "JetBrains Mono", monospace; font-size: 10px; padding: 0 4px;';
+    sel.style.display = 'none';
+    sel.parentNode.insertBefore(repl, sel);
+    selectSwaps.push({ sel, repl });
+  });
+
+  // Let layout settle after style changes.
+  await new Promise(r => requestAnimationFrame(r));
+
+  try {
+    const fullW = Math.max(target.scrollWidth, target.offsetWidth);
+    const fullH = Math.max(target.scrollHeight, target.offsetHeight);
+    const canvas = await html2canvas(target, {
+      backgroundColor: '#0a0e17',
+      scale: 2,
+      logging: false,
+      useCORS: true,
+      width:        fullW,
+      height:       fullH,
+      windowWidth:  fullW,
+      windowHeight: fullH,
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    const baseStr = analyticsBaseline === 'custom'
+      ? `custom-${Math.round(analyticsCustomTarget)}`
+      : analyticsBaseline;
+    const filename = `tqqq-analytics-${analyticsStrategy}-vs-${baseStr}-${stamp}.png`;
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 200);
+    }, 'image/png');
+  } catch (err) {
+    console.error('Download failed:', err);
+    alert('Download failed: ' + err.message);
+  } finally {
+    selectSwaps.forEach(({ sel, repl }) => {
+      repl.remove();
+      sel.style.display = '';
+    });
+    origStyles.forEach(({ el, overflow, maxHeight, height, flex }) => {
+      el.style.overflow  = overflow;
+      el.style.maxHeight = maxHeight;
+      el.style.height    = height;
+      el.style.flex      = flex;
+    });
+  }
+}
+
 // Strategy selector: click a pill to rebuild the heatmap with that strategy.
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('#analytics-strategy-options button[data-strat]');

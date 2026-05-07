@@ -261,6 +261,31 @@
     background: rgba(34, 211, 238, 0.16);
     border-color: var(--accent);
   }
+  .analytics-actions-left {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .modal-icon-btn {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(34, 211, 238, 0.08);
+    border: 1px solid rgba(34, 211, 238, 0.3);
+    border-radius: 6px;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .modal-icon-btn:hover {
+    background: rgba(34, 211, 238, 0.18);
+    border-color: var(--accent);
+  }
+  .modal-icon-btn:active {
+    transform: scale(0.96);
+  }
   .modal-close {
     width: 24px;
     height: 24px;
