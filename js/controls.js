@@ -309,6 +309,11 @@ function shareConfig() {
   }
   if (typeof analyticsBaseline !== 'undefined' && analyticsBaseline && analyticsBaseline !== 'compounded') {
     params.set('ab', analyticsBaseline);
+    // For 'custom' also share the dollar target, otherwise the receiver
+    // falls back to the $1M default.
+    if (analyticsBaseline === 'custom' && typeof analyticsCustomTarget === 'number' && analyticsCustomTarget > 0) {
+      params.set('act', String(Math.round(analyticsCustomTarget)));
+    }
   }
 
   const url = window.location.origin + window.location.pathname + '?' + params.toString();

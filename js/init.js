@@ -69,6 +69,10 @@
   // Analytics modal pre-state (modal is opened after render() so the chart exists)
   if (params.get('as')) analyticsStrategy = params.get('as');
   if (params.get('ab')) analyticsBaseline = params.get('ab');
+  if (params.get('act')) {
+    const v = parseAmount(params.get('act'));
+    if (Number.isFinite(v) && v > 0) analyticsCustomTarget = v;
+  }
 
   if (!hasUrlParams) {
     try {
@@ -118,6 +122,18 @@
     });
     const baselineSelect = document.getElementById('analytics-baseline');
     if (baselineSelect) baselineSelect.value = analyticsBaseline;
+    // The dropdown's change handler is what normally toggles the custom-input
+    // field — but setting `.value` programmatically doesn't fire change. Mirror
+    // its visibility manually here when restoring from a URL.
+    const customInput = document.getElementById('analytics-baseline-custom-input');
+    if (customInput) {
+      if (analyticsBaseline === 'custom') {
+        customInput.removeAttribute('hidden');
+        customInput.value = fmtFull(analyticsCustomTarget);
+      } else {
+        customInput.setAttribute('hidden', '');
+      }
+    }
     toggleAnalytics();
   }
 })();
