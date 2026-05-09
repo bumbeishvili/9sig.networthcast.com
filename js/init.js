@@ -73,6 +73,10 @@
     const v = parseAmount(params.get('act'));
     if (Number.isFinite(v) && v > 0) analyticsCustomTarget = v;
   }
+  if (params.get('acp')) {
+    const v = parseFloat(params.get('acp'));
+    if (Number.isFinite(v)) analyticsCustomGrowthPct = v;
+  }
 
   if (!hasUrlParams) {
     try {
@@ -123,15 +127,22 @@
     const baselineSelect = document.getElementById('analytics-baseline');
     if (baselineSelect) baselineSelect.value = analyticsBaseline;
     // The dropdown's change handler is what normally toggles the custom-input
-    // field — but setting `.value` programmatically doesn't fire change. Mirror
-    // its visibility manually here when restoring from a URL.
+    // fields — but setting `.value` programmatically doesn't fire change.
+    // Mirror its visibility manually here when restoring from a URL.
     const customInput = document.getElementById('analytics-baseline-custom-input');
-    if (customInput) {
-      if (analyticsBaseline === 'custom') {
-        customInput.removeAttribute('hidden');
-        customInput.value = fmtFull(analyticsCustomTarget);
-      } else {
-        customInput.setAttribute('hidden', '');
+    const pctInput    = document.getElementById('analytics-baseline-pct-input');
+    if (customInput) customInput.setAttribute('hidden', '');
+    if (pctInput)    pctInput.setAttribute('hidden', '');
+    if (analyticsBaseline === 'custom' && customInput) {
+      customInput.removeAttribute('hidden');
+      customInput.value = fmtFull(analyticsCustomTarget);
+    } else if (analyticsBaseline === 'custom-pct' && pctInput) {
+      pctInput.removeAttribute('hidden');
+      pctInput.value = String(analyticsCustomGrowthPct);
+      const pctDisplay = document.getElementById('analytics-baseline-pct-display');
+      if (pctDisplay) {
+        pctDisplay.removeAttribute('hidden');
+        pctDisplay.textContent = (analyticsCustomGrowthPct >= 0 ? '+' : '') + analyticsCustomGrowthPct + '%';
       }
     }
     toggleAnalytics();

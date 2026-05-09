@@ -24,18 +24,20 @@ const STRATEGY_LABELS = {
 
 let analyticsStrategy = 'adaptive';
 let analyticsBaseline = 'compounded';
-let analyticsCustomTarget = 1000000; // default $1M when "Custom Target" is selected
+let analyticsCustomTarget = 1000000; // default $1M when "Custom Target ($)" is selected
+let analyticsCustomGrowthPct = 20;   // default 20%/yr when "Custom Growth (%)" is selected
 let analyticsBuildEpoch = 0;
 let analyticsRefreshTimer = null;
 
 const BASELINE_LABELS = {
-  'compounded': 'Compounded Cash',
-  'bh-spy':     'B&H SPY',
-  'bh-qqq':     'B&H QQQ',
-  'adaptive':   'Adaptive',
-  '9sig':       '9sig',
-  'bh-tqqq':    'B&H TQQQ',
-  'custom':     'Custom Target',
+  'compounded':  'Compounded Cash',
+  'bh-spy':      'B&H SPY',
+  'bh-qqq':      'B&H QQQ',
+  'adaptive':    'Adaptive',
+  '9sig':        '9sig',
+  'bh-tqqq':     'B&H TQQQ',
+  'custom':      'Custom Target',
+  'custom-pct':  'Custom Growth % per year',
 };
 
 // Parse user-entered amounts like "$1M", "1m", "100k", "$1,000,000", "10000".
@@ -55,6 +57,7 @@ function parseAmount(str) {
 function baselineFinalValue(sim, key) {
   switch (key) {
     case 'custom':    return analyticsCustomTarget;
+    case 'custom-pct': return 0; // handled separately at color time (cell-to-cell comparison)
     case '9sig':      { const a = sim.log;           return a && a.length ? a[a.length - 1].total : 0; }
     case 'bh-tqqq':   { const a = sim.bhPoints;      return a && a.length ? a[a.length - 1].value : 0; }
     case 'bh-qqq':    { const a = sim.qqqPoints;     return a && a.length ? a[a.length - 1].value : 0; }
@@ -271,12 +274,20 @@ document.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'analytics-baseline') {
     analyticsBaseline = e.target.value;
     const customInput = document.getElementById('analytics-baseline-custom-input');
-    if (customInput) {
-      if (analyticsBaseline === 'custom') {
-        customInput.removeAttribute('hidden');
-        customInput.value = fmtFull(analyticsCustomTarget);
-      } else {
-        customInput.setAttribute('hidden', '');
+    const pctInput    = document.getElementById('analytics-baseline-pct-input');
+    const pctDisplay  = document.getElementById('analytics-baseline-pct-display');
+    if (customInput) customInput.setAttribute('hidden', '');
+    if (pctInput)    pctInput.setAttribute('hidden', '');
+    if (pctDisplay)  pctDisplay.setAttribute('hidden', '');
+    if (analyticsBaseline === 'custom' && customInput) {
+      customInput.removeAttribute('hidden');
+      customInput.value = fmtFull(analyticsCustomTarget);
+    } else if (analyticsBaseline === 'custom-pct' && pctInput) {
+      pctInput.removeAttribute('hidden');
+      pctInput.value = String(analyticsCustomGrowthPct);
+      if (pctDisplay) {
+        pctDisplay.removeAttribute('hidden');
+        pctDisplay.textContent = (analyticsCustomGrowthPct >= 0 ? '+' : '') + analyticsCustomGrowthPct + '%';
       }
     }
     buildHeatmap();
@@ -292,6 +303,20 @@ document.addEventListener('change', (e) => {
       e.target.value = fmtFull(v); // re-format to canonical
       buildHeatmap();
     }
+  }
+});
+
+// Custom growth-percentage slider: ranges from -100% to +100%, rebuilds the
+// chart on every drag step. Spiral mode is fast enough that live rebuild is
+// fine — the chart re-renders without flicker.
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'analytics-baseline-pct-input') {
+    const v = parseFloat(e.target.value);
+    if (!Number.isFinite(v)) return;
+    analyticsCustomGrowthPct = v;
+    const display = document.getElementById('analytics-baseline-pct-display');
+    if (display) display.textContent = (v >= 0 ? '+' : '') + v + '%';
+    buildHeatmap();
   }
 });
 
@@ -372,11 +397,28 @@ document.addEventListener('change', (e) => {
     const value     = +td.dataset.value;
     const derived   = +td.dataset.derived;
     const maxDD     = +td.dataset.maxDd;
-    const baselineVal = derived > 0 ? value / derived : 0;
+    let baselineVal = derived > 0 ? value / derived : 0;
     const stratLabel = STRATEGY_LABELS[analyticsStrategy] || 'Adaptive';
-    const baseLabel  = analyticsBaseline === 'custom'
-      ? `Target ${fmtFull(analyticsCustomTarget)}`
-      : (BASELINE_LABELS[analyticsBaseline] || 'Baseline');
+    let baseLabel;
+    if (analyticsBaseline === 'custom') {
+      baseLabel = `Target ${fmtFull(analyticsCustomTarget)}`;
+    } else if (analyticsBaseline === 'custom-pct') {
+      // Pull the previous-period cell's value off the DOM so the tooltip can
+      // show the year-over-year threshold (prev × (1 + pct%)).
+      const prevPeriod = period - 1;
+      let prevValue = +(sliderToInitial(+document.getElementById('slider-initial').value));
+      if (prevPeriod > 0) {
+        const prevTd = grid.querySelector(`td[data-yp="${startYear}:${prevPeriod}"]`);
+        if (prevTd && prevTd.dataset.value) prevValue = +prevTd.dataset.value;
+      }
+      baselineVal = prevValue * (1 + analyticsCustomGrowthPct / 100);
+      const pctTxt = (analyticsCustomGrowthPct % 1 === 0 ? analyticsCustomGrowthPct.toFixed(0) : analyticsCustomGrowthPct.toFixed(1));
+      baseLabel = prevPeriod > 0
+        ? `+${pctTxt}% from ${prevPeriod}y (${fmtFull(prevValue)})`
+        : `+${pctTxt}% from start (${fmtFull(prevValue)})`;
+    } else {
+      baseLabel = BASELINE_LABELS[analyticsBaseline] || 'Baseline';
+    }
     const maxV = Math.max(value, baselineVal) || 1;
     const w1 = (value / maxV * 100).toFixed(1);
     const w2 = (baselineVal / maxV * 100).toFixed(1);
@@ -426,6 +468,9 @@ document.addEventListener('change', (e) => {
   }
 
   grid.addEventListener('mousemove', (e) => {
+    // Spiral mode owns its own tooltip lifecycle on each <rect>; don't let
+    // this grid-level handler hide what the spiral just showed.
+    if (e.target && e.target.closest && e.target.closest('.spiral-svg')) return;
     const cell = e.target.closest('td.heatmap-cell, th[data-r], th[data-c]');
     if (!cell || !grid.contains(cell)) {
       clearHighlights();
@@ -504,6 +549,363 @@ function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, tqqqAboveMu
   m.innerHTML = items.join('');
 }
 
+// Position the shared #heatmap-tooltip near the cursor (with viewport-edge
+// flipping). Used by spiral-mode hover.
+function positionSpiralTooltip(tooltip, e) {
+  const margin = 14;
+  tooltip.style.left = '0px';
+  tooltip.style.top  = '0px';
+  const r  = tooltip.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = e.clientX + margin;
+  let y = e.clientY + margin;
+  if (x + r.width  > vw - 8) x = e.clientX - r.width  - margin;
+  if (y + r.height > vh - 8) y = e.clientY - r.height - margin;
+  tooltip.style.left = Math.max(4, x) + 'px';
+  tooltip.style.top  = Math.max(4, y) + 'px';
+}
+
+// Render the rich tooltip (same .tt-* classes as the heatmap grid mode) for
+// a spiral-mode bar hover.
+function showSpiralTooltip(tooltip, e, d, threshold) {
+  const stratLabel = STRATEGY_LABELS[analyticsStrategy] || 'Adaptive';
+  const sign       = d.pct >= 0 ? '+' : '';
+  const hit        = d.pct >= threshold;
+  const tag        = d.partial ? ' (YTD)' : '';
+  const startLabel = `Start of ${d.year}`;
+  const endLabel   = d.partial ? 'Latest' : `End of ${d.year}`;
+  const thrTxt     = (threshold >= 0 ? '+' : '') + threshold + '%';
+  // Bars scaled relative to the larger of the two values, like the heatmap
+  // tooltip's strategy-vs-baseline pair.
+  const maxV = Math.max(d.prevPrice, d.price) || 1;
+  const w1   = (d.prevPrice / maxV * 100).toFixed(1);
+  const w2   = (d.price     / maxV * 100).toFixed(1);
+
+  tooltip.innerHTML = `
+    <div class="tt-period">${stratLabel} &middot; ${d.year}${tag}</div>
+    <div class="tt-strat">${sign}${d.pct.toFixed(2)}%</div>
+    <div class="tt-bars">
+      <div class="tt-bar-row">
+        <span class="tt-bar-label">${startLabel}</span>
+        <div class="tt-bar-track"><div class="tt-bar-fill" style="width:${w1}%"></div></div>
+        <span class="tt-bar-value">(${fmtFull(Math.round(d.prevPrice))})</span>
+      </div>
+      <div class="tt-bar-row tt-bar-primary">
+        <span class="tt-bar-label">${endLabel}</span>
+        <div class="tt-bar-track"><div class="tt-bar-fill" style="width:${w2}%"></div></div>
+        <span class="tt-bar-value">(${fmtFull(Math.round(d.price))})</span>
+      </div>
+    </div>
+    <div class="tt-foot">
+      <span>vs threshold (${thrTxt})</span>
+      <span class="tt-dd" style="color:${hit ? '#22c55e' : '#ef4444'}">${hit ? '✓ hit' : '✗ miss'}</span>
+    </div>
+  `;
+  tooltip.removeAttribute('hidden');
+  positionSpiralTooltip(tooltip, e);
+}
+
+// Map a strategy to the underlying asset whose price drives the spiral's
+// year-over-year comparison.
+const SPIRAL_ASSET_FOR_STRATEGY = {
+  'bh-spy':   'spy',
+  'bh-qqq':   'qqq',
+  'bh-tqqq':  'tqqq',
+  '9sig':     'tqqq',
+  'adaptive': 'tqqq',
+};
+
+// Extract the strategy's quarterly (date, value) pairs from a simulate()
+// result. Used by the spiral to get per-year portfolio values.
+function strategyDateValues(sim, strat) {
+  switch (strat) {
+    case '9sig':     return sim.log           ? sim.log.map(l => ({ date: l.date, value: l.total })) : [];
+    case 'bh-tqqq':  return sim.bhPoints      || [];
+    case 'bh-qqq':   return sim.qqqPoints     || [];
+    case 'bh-spy':   return sim.spyPoints     || [];
+    case 'adaptive': return sim.adaptivePoints|| [];
+    default:         return [];
+  }
+}
+
+// Cache for the spiral's full-range simulate() result so that dragging the
+// percentage slider (which only changes the colour threshold, not the sim
+// inputs) doesn't trigger a fresh simulation each frame.
+let _spiralSim = null;
+let _spiralSimKey = null;
+
+function getSpiralSim(initial, monthly, rate, annualRaise, opts) {
+  const key = JSON.stringify({
+    initial, monthly, rate, annualRaise,
+    s: opts && opts.switchTo9sig,
+    a: opts && opts.switchToAllIn,
+    w: opts && opts.yearsBack,
+  });
+  if (_spiralSimKey === key && _spiralSim) return _spiralSim;
+  _spiralSim    = simulate(initial, monthly, rate, 0, quarterlyData.length - 1, annualRaise, opts);
+  _spiralSimKey = key;
+  return _spiralSim;
+}
+
+// Spiral chart for "Custom Growth (% per year)" mode. Uses D3 with the
+// canonical "spiral path + getPointAtLength" technique (Stack Overflow's
+// reference implementation): build a smooth radial spiral as a single SVG
+// path, then walk along it placing one rect per data point at the right
+// angle. One bar per year: the year-over-year change in the *first trading
+// day's price* of the chosen strategy's underlying asset. Oldest year at
+// the center, newest at the outer edge.
+//
+// Renders directly into `#analytics-heatmap` (mutates the DOM).
+function renderSpiralChart(sim) {
+  const grid = document.getElementById('analytics-heatmap');
+  if (!grid) return;
+  if (typeof d3 === 'undefined') {
+    grid.innerHTML = '<div class="spiral-loading">D3 still loading — try again in a moment.</div>';
+    return;
+  }
+
+  // Strategy's quarterly (date, value) series from the precomputed sim.
+  const series = strategyDateValues(sim, analyticsStrategy);
+  if (!series.length) {
+    grid.innerHTML = '<div class="spiral-loading">Not enough data.</div>';
+    return;
+  }
+
+  // Build year → strategy value at end of year. Each year's last quarterly
+  // entry wins (Q4 close = Dec 31), so this captures end-of-year portfolio
+  // value. For the in-progress latest year, the "end" is whatever the most
+  // recent quarterly snapshot is (partial-YTD).
+  const yearEndValue = new Map();
+  for (const item of series) {
+    const y = parseInt(item.date.substring(0, 4));
+    yearEndValue.set(y, item.value);
+  }
+  const years = Array.from(yearEndValue.keys()).sort((a, b) => a - b);
+
+  // One bar per year (skip the first, no prior year-end to compare against).
+  // Each bar is labeled with the year it measures: bar "2025" = growth from
+  // start of 2025 to start of 2026 (= Dec 31 2024 portfolio → Dec 31 2025).
+  // The latest in-progress year compares Dec 31 last-year → most recent
+  // quarterly snapshot, so it reads as partial-YTD.
+  const lastSeriesEntry = series[series.length - 1];
+  const lastMonth = parseInt(lastSeriesEntry.date.substring(5, 7));
+  const lastDay   = parseInt(lastSeriesEntry.date.substring(8, 10));
+  const latestYearComplete = (lastMonth === 12 && lastDay >= 28);
+
+  const points = [];
+  for (let i = 1; i < years.length; i++) {
+    const yPrev = years[i - 1], yCur = years[i];
+    const startV = yearEndValue.get(yPrev);
+    const endV   = yearEndValue.get(yCur);
+    if (!(startV > 0 && endV > 0)) continue;
+    const isLast = (i === years.length - 1);
+    points.push({
+      year:      yCur,
+      pct:       (endV / startV - 1) * 100,
+      prevPrice: startV, // strategy value at start of yCur
+      price:     endV,   // strategy value at end of yCur (or latest, if partial)
+      partial:   isLast && !latestYearComplete,
+    });
+  }
+  if (!points.length) {
+    grid.innerHTML = '<div class="spiral-loading">Not enough data.</div>';
+    return;
+  }
+
+  // Mount point — fill the existing heatmap container.
+  grid.innerHTML = '<div class="spiral-wrap"></div>';
+  const wrap   = grid.querySelector('.spiral-wrap');
+  const w      = wrap.clientWidth  || 600;
+  const h      = wrap.clientHeight || 600;
+  const size   = Math.max(300, Math.min(w, h));
+  const r      = size / 2 - 40;
+
+  // Spiral params: oldest at center, exactly 4 full turns clockwise so the
+  // path ends at 12 o'clock (the latest year sits at the top of the figure).
+  const start       = 0;
+  const end         = 2.0;
+  const numSpirals  = 4;
+  // Negative angle → wind in the opposite direction. With d3.lineRadial's
+  // angle convention (0 at 12 o'clock, positive = one direction), negating
+  // here flips the spiral's progression so chronological order (oldest at
+  // center → newest at outer edge) winds clockwise as viewed on screen.
+  const theta       = (rr) => -numSpirals * Math.PI * rr;
+  const radius      = d3.scaleLinear().domain([start, end]).range([40, r]);
+
+  const svg = d3.select(wrap).append('svg')
+    .attr('width', size)
+    .attr('height', size)
+    .attr('class', 'spiral-svg');
+  const g = svg.append('g')
+    .attr('transform', `translate(${size / 2},${size / 2})`);
+
+  // Draw the underlying spiral as a path so we can walk along it.
+  const samples    = d3.range(start, end + 0.001, (end - start) / 1000);
+  const spiralLine = d3.lineRadial()
+    .curve(d3.curveCardinal)
+    .angle(theta)
+    .radius(radius);
+  const path = g.append('path')
+    .datum(samples)
+    .attr('id', 'spiral-guide')
+    .attr('d', spiralLine)
+    .style('fill', 'none')
+    .style('stroke', 'rgba(100,116,139,0.18)')
+    .style('stroke-width', 1);
+
+  const spiralLength = path.node().getTotalLength();
+  const N            = points.length;
+  const barWidth = 48;
+
+  // Compressed height range with a log curve, so a +200% year isn't
+  // visually 10× a +20% year — they read as the same "kind of bar" with
+  // a small magnitude hint.
+  const minBarH  = 18;
+  const maxBarH  = 41;
+  const logCap   = Math.log1p(200);
+  const heightFor = (pctMag) => minBarH + (Math.log1p(Math.min(pctMag, 200)) / logCap) * (maxBarH - minBarH);
+  const threshold = analyticsCustomGrowthPct;
+
+  // Build each bar as a *polygon that follows the actual spiral segment*.
+  // For each bar we sample the spiral guide path at several points across
+  // the bar's arc-length width, push each sample perpendicular to the local
+  // tangent by ±height/2, and connect them as a closed polygon. The bar's
+  // centerline therefore traces the spiral exactly, and the inner/outer
+  // edges stay parallel to the spiral even on the tightly-wound inner turns.
+  const SAMPLES_PER_BAR = 6;
+
+  // Sample the spiral path with linear extrapolation past either endpoint —
+  // ensures bars at the very start or end (e.g. the latest year sitting at
+  // 12 o'clock) render as complete polygons instead of collapsing because
+  // their out-of-range samples got clamped to the same endpoint.
+  function spiralPointAt(lp) {
+    if (lp >= 0 && lp <= spiralLength) return path.node().getPointAtLength(lp);
+    if (lp > spiralLength) {
+      const end  = path.node().getPointAtLength(spiralLength);
+      const back = path.node().getPointAtLength(Math.max(0, spiralLength - 1));
+      const overshoot = lp - spiralLength;
+      return { x: end.x + (end.x - back.x) * overshoot, y: end.y + (end.y - back.y) * overshoot };
+    }
+    // lp < 0
+    const start = path.node().getPointAtLength(0);
+    const fwd   = path.node().getPointAtLength(Math.min(spiralLength, 1));
+    return { x: start.x + (start.x - fwd.x) * (-lp), y: start.y + (start.y - fwd.y) * (-lp) };
+  }
+
+  const bars = g.selectAll('path.spiral-bar')
+    .data(points)
+    .enter()
+    .append('path')
+    .attr('class', 'spiral-bar')
+    .each(function (d, i) {
+      const linePer = N > 1 ? (i / (N - 1)) * spiralLength : 0;
+      const pos     = path.node().getPointAtLength(linePer);
+      const ahead   = path.node().getPointAtLength(Math.min(linePer + 1, spiralLength));
+      d.x = pos.x;
+      d.y = pos.y;
+      d.a = Math.atan2(ahead.y - pos.y, ahead.x - pos.x) * 180 / Math.PI;
+      d.dist = Math.hypot(pos.x, pos.y) || 1;
+      d.linePer = linePer;
+    })
+    .attr('d', d => {
+      const h     = heightFor(Math.abs(d.pct));
+      const halfH = h / 2;
+      // Sample the spiral guide across the bar's arc-length range, using
+      // linear extrapolation past either endpoint so the start/end bars are
+      // complete polygons (no collapse on out-of-range clamping).
+      const inner = []; // edge facing the spiral center
+      const outer = []; // edge facing outward
+      for (let s = 0; s <= SAMPLES_PER_BAR; s++) {
+        const t  = (s / SAMPLES_PER_BAR - 0.5) * barWidth; // -halfBar..+halfBar
+        const lp = d.linePer + t;
+        const p  = spiralPointAt(lp);
+        const q  = spiralPointAt(lp + 0.75);
+        const tx = q.x - p.x, ty = q.y - p.y;
+        const tlen = Math.hypot(tx, ty) || 1;
+        // Perpendicular to the local tangent (rotate +90°).
+        let nx = -ty / tlen;
+        let ny =  tx / tlen;
+        // Make sure nx,ny points OUTWARD (radially away from origin) so
+        // "outer" stays consistent across the bar (otherwise the polygon
+        // self-intersects when the spiral curves heavily).
+        const radDot = nx * p.x + ny * p.y;
+        if (radDot < 0) { nx = -nx; ny = -ny; }
+        outer.push([p.x + nx * halfH, p.y + ny * halfH]);
+        inner.push([p.x - nx * halfH, p.y - ny * halfH]);
+      }
+      let pathD = `M ${outer[0][0].toFixed(2)} ${outer[0][1].toFixed(2)}`;
+      for (let k = 1; k < outer.length; k++) pathD += ` L ${outer[k][0].toFixed(2)} ${outer[k][1].toFixed(2)}`;
+      for (let k = inner.length - 1; k >= 0; k--) pathD += ` L ${inner[k][0].toFixed(2)} ${inner[k][1].toFixed(2)}`;
+      return pathD + ' Z';
+    })
+    .style('fill', d => d.pct >= threshold ? '#22c55e' : '#ef4444')
+    .style('stroke', 'none')
+    .attr('data-year', d => d.year)
+    .attr('data-pct',  d => d.pct.toFixed(2));
+
+  // Custom rich tooltip on hover (same .tt-* classes as the heatmap grid
+  // tooltip) — appears instantly, follows the cursor.
+  const tooltip = document.getElementById('heatmap-tooltip');
+  if (tooltip) {
+    bars
+      .style('cursor', 'crosshair')
+      .on('mouseenter', function (event, d) { showSpiralTooltip(tooltip, event, d, threshold); })
+      .on('mousemove',  function (event)    { if (!tooltip.hasAttribute('hidden')) positionSpiralTooltip(tooltip, event); })
+      .on('mouseleave', function ()         { tooltip.setAttribute('hidden', ''); });
+  }
+
+  // Percent text *inside* each bar — small and bold, white for contrast on
+  // green/red. Same tangent-rotation + auto-flip logic as year labels.
+  g.selectAll('text.spiral-pct')
+    .data(points)
+    .enter()
+    .append('text')
+    .attr('class', 'spiral-pct')
+    .attr('x', d => d.x)
+    .attr('y', d => d.y)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .style('font', '700 8.4px "JetBrains Mono", monospace')
+    .style('fill', '#ffffff')
+    .style('pointer-events', 'none')
+    .attr('transform', d => {
+      const flip = d.a > 90 || d.a < -90;
+      return `rotate(${flip ? d.a + 180 : d.a},${d.x},${d.y})`;
+    })
+    .text(d => (d.pct >= 0 ? '+' : '') + Math.round(d.pct) + '%');
+
+  // Per-bar year labels. Each label sits just outside its bar along the
+  // *radial-outward* direction (computed directly from origin → bar vector),
+  // so labels always end up on the side facing away from the spiral center
+  // — including the last year, which sits above the figure's top. The
+  // rotation matches the local tangent so labels read "along" the spiral,
+  // and we auto-flip 180° on the back half of each turn so no label ends up
+  // upside-down.
+  g.selectAll('text.spiral-year')
+    .data(points)
+    .enter()
+    .append('text')
+    .attr('class', 'spiral-year')
+    .each(function (d) {
+      const dist   = Math.hypot(d.x, d.y) || 1;
+      const offset = heightFor(Math.abs(d.pct)) / 2 + 9;
+      d.tx = d.x + (d.x / dist) * offset;
+      d.ty = d.y + (d.y / dist) * offset;
+    })
+    .attr('x', d => d.tx)
+    .attr('y', d => d.ty)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .style('font', '8.4px "JetBrains Mono", monospace')
+    .style('fill', 'rgba(148,163,184,0.75)')
+    .style('pointer-events', 'none')
+    .attr('transform', d => {
+      const flip = d.a > 90 || d.a < -90;
+      return `rotate(${flip ? d.a + 180 : d.a},${d.tx},${d.ty})`;
+    })
+    .text(d => d.year);
+}
+
 async function buildHeatmap() {
   if (!quarterlyData) return;
   const epoch = ++analyticsBuildEpoch;
@@ -531,10 +933,30 @@ async function buildHeatmap() {
   if (titleEl) titleEl.textContent = (STRATEGY_LABELS[analyticsStrategy] || 'Adaptive') + ' — Final Value';
   const subEl = document.querySelector('.analytics-chart-sub');
   if (subEl) {
-    const bLabel = analyticsBaseline === 'custom'
-      ? `Custom Target (${fmtFull(analyticsCustomTarget)})`
-      : (BASELINE_LABELS[analyticsBaseline] || 'baseline');
-    subEl.innerHTML = `rows: year you started investing &nbsp;·&nbsp; columns: N years later &nbsp;·&nbsp; cell color: log of performance against <strong>${bLabel}</strong> (1× = match, anchored at slate midpoint)`;
+    let bLabel, modeNote;
+    if (analyticsBaseline === 'custom') {
+      bLabel = `Custom Target (${fmtFull(analyticsCustomTarget)})`;
+      modeNote = 'green = hit the goal, red = below it';
+    } else if (analyticsBaseline === 'custom-pct') {
+      const pctTxt = (analyticsCustomGrowthPct % 1 === 0 ? analyticsCustomGrowthPct.toFixed(0) : analyticsCustomGrowthPct.toFixed(1));
+      bLabel = `+${pctTxt}% per year`;
+      modeNote = 'green = grew at least that much from the previous-year cell, red = didn\'t';
+    } else {
+      bLabel = BASELINE_LABELS[analyticsBaseline] || 'baseline';
+      modeNote = '1× = match, anchored at slate midpoint';
+    }
+    subEl.innerHTML = `rows: year you started investing &nbsp;·&nbsp; columns: N years later &nbsp;·&nbsp; cell color vs <strong>${bLabel}</strong> (${modeNote})`;
+  }
+
+  // Spiral mode: run a single full-history simulate() with the user's
+  // current params (initial / monthly / raise / cash rate / adaptive params)
+  // and feed its strategy-value series into the spiral. The sim is cached
+  // by params, so dragging the threshold slider only repaints — no resim.
+  if (analyticsBaseline === 'custom-pct') {
+    progEl.setAttribute('hidden', '');
+    const fullSim = getSpiralSim(initial, monthly, rate, annualRaise, opts);
+    renderSpiralChart(fullSim);
+    return;
   }
 
   // Year -> first/last quarter index.
@@ -556,12 +978,12 @@ async function buildHeatmap() {
   // you started investing; the column is "N years later". Entry anchors at
   // the *last trading day of the previous year* — that's effectively the
   // first close of the starting year, matching what a normal person means by
-  // "I invested at the start of 2025". (Previously we used the Q1-end of the
-  // starting year, which silently lopped off the first 3 months of returns.)
-  // For the earliest year in the dataset (no prior year exists), fall back
-  // to the first quarter of the starting year.
+  // "I invested at the start of 2025". For the earliest year in the dataset
+  // (no prior year exists), we fall back to the first quarter of the starting
+  // year. We include the latest year (maxYear) even when only partial data
+  // exists for it — its row will just show fewer columns / partial-year values.
   const cells = [];
-  for (let sy = maxYear - 1; sy >= minYear; sy--) {
+  for (let sy = maxYear; sy >= minYear; sy--) {
     for (const p of periods) {
       const endYear = sy + p - 1;
       if (endYear > maxYear) continue;
@@ -571,7 +993,7 @@ async function buildHeatmap() {
         : yearFirst.get(sy);
       if (entryIdx == null) continue;
       const exitIdx  = yearLast.get(endYear);
-      if (exitIdx - entryIdx < 2) continue;
+      if (exitIdx - entryIdx < 1) continue; // need at least one quarter of span
       cells.push({ year: sy, period: p, entryIdx, exitIdx, value: 0 });
     }
   }
@@ -583,7 +1005,7 @@ async function buildHeatmap() {
   // hover highlight without per-render listener wiring.
   const headerHTML = '<tr><th></th>' + periods.map(p => `<th data-c="${p}">${p}y</th>`).join('') + '</tr>';
   const bodyParts = [];
-  for (let sy = maxYear - 1; sy >= minYear; sy--) {
+  for (let sy = maxYear; sy >= minYear; sy--) {
     bodyParts.push(`<tr><th data-r="${sy}">${sy}</th>`);
     for (const p of periods) {
       const c = lookup.get(sy + ':' + p);
@@ -595,7 +1017,6 @@ async function buildHeatmap() {
   }
   grid.classList.remove('loading');
   grid.innerHTML = '<table class="heatmap-table"><thead>' + headerHTML + '</thead><tbody>' + bodyParts.join('') + '</tbody></table>';
-
   const cellRefs = new Map();
   grid.querySelectorAll('td.heatmap-cell[data-yp]').forEach(td => cellRefs.set(td.dataset.yp, td));
 
@@ -673,6 +1094,17 @@ async function buildHeatmap() {
       // there?") so the color should be too.
       if (c.value >= analyticsCustomTarget) { r = 34;  g = 197; b = 94;  } // #22c55e
       else                                  { r = 239; g = 68;  b = 68;  } // #ef4444
+    } else if (analyticsBaseline === 'custom-pct') {
+      // Year-over-year growth check: did this cell's value increase by ≥ X%
+      // vs the same starting year's previous-period cell (one column to the
+      // left)? Each column represents +1 year of holding, so this measures
+      // growth during that single year. Period 1 has no prior column, so it
+      // falls back to comparing against the entry point (initial investment).
+      const prevC = c.period > 1 ? lookup.get(c.year + ':' + (c.period - 1)) : null;
+      const prevValue = prevC ? prevC.value : initial;
+      const threshold = prevValue * (1 + analyticsCustomGrowthPct / 100);
+      if (prevValue > 0 && c.value >= threshold) { r = 34;  g = 197; b = 94;  } // green
+      else                                       { r = 239; g = 68;  b = 68;  } // red
     } else {
       // Diverging palette: red-500 (#ef4444) → slate-600 (#475569) → green-500
       // (#22c55e). Pre-apply a sqrt-based curve so small deviations from the

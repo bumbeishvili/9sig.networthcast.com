@@ -309,10 +309,13 @@ function shareConfig() {
   }
   if (typeof analyticsBaseline !== 'undefined' && analyticsBaseline && analyticsBaseline !== 'compounded') {
     params.set('ab', analyticsBaseline);
-    // For 'custom' also share the dollar target, otherwise the receiver
-    // falls back to the $1M default.
+    // For 'custom' also share the dollar target; for 'custom-pct' share the
+    // growth percentage. Otherwise the receiver falls back to defaults.
     if (analyticsBaseline === 'custom' && typeof analyticsCustomTarget === 'number' && analyticsCustomTarget > 0) {
       params.set('act', String(Math.round(analyticsCustomTarget)));
+    }
+    if (analyticsBaseline === 'custom-pct' && typeof analyticsCustomGrowthPct === 'number') {
+      params.set('acp', String(analyticsCustomGrowthPct));
     }
   }
 
