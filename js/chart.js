@@ -418,8 +418,19 @@ function render() {
   const opacityVal = +document.getElementById('slider-envelope-opacity').value / 100;
   document.getElementById('disp-envelope-opacity').textContent = 'opacity ' + opacityVal.toFixed(2);
   const envColor = `rgba(34,211,238,${opacityVal})`;
+  // Each ghost line is the same 9sig strategy with rebalance shifted to a
+  // different day — must inherit ALL the user's 9sig knobs (signal-line
+  // growth %, underlying, 30-down drop, spike trigger), otherwise the
+  // ghosts wouldn't track the user's current strategy.
   const shiftResults = showEnvelope
-    ? shiftedQuarterlyCache.map(qData => simulate(initial, monthly, rate, entryIdx, exitIdx, annualRaise, { qData, skipBH: true }).log.map(l => l.total))
+    ? shiftedQuarterlyCache.map(qData => simulate(initial, monthly, rate, entryIdx, exitIdx, annualRaise, {
+        qData,
+        skipBH: true,
+        qGrowth,
+        underlyingCol: sigUlCol,
+        crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
+        spikeTriggerPct: Number.isFinite(spikeTrigPct) ? spikeTrigPct : 100,
+      }).log.map(l => l.total))
     : [];
 
   if (log.length < 1) {

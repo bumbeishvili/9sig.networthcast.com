@@ -82,12 +82,16 @@
     .right-col > .panel > .control-group { order: 3; }
     .right-col > .panel > div:last-child { order: 4; }
     .header { gap: 8px; margin-bottom: 14px; }
-    /* Pull share button out of absolute and stack it below the title. */
+    /* Pull share button out of absolute and stack it below the title. Icon-only
+       at this size — the desktop "Share current configuration" label is hidden. */
     #share-btn {
       position: static;
       margin-top: 4px;
       align-self: center;
+      width: 34px;
+      padding: 0;
     }
+    #share-btn .share-btn-label { display: none; }
     /* Analytics modal: let the title row wrap, push strategy options + baseline
        onto their own full-width rows, and let strategy options scroll
        horizontally inside the row instead of wrapping awkwardly. */
@@ -1584,7 +1588,8 @@
     border-radius: 6px;
   }
 
-  /* Icon-only share button — just the share glyph, no text label. */
+  /* Share button — icon + text on desktop, icon-only on smaller viewports
+     (the @media (max-width: 900px) override below hides .share-btn-label). */
   #share-btn {
     position: absolute;
     top: 0;
@@ -1592,16 +1597,19 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
+    gap: 8px;
     height: 34px;
-    padding: 0;
+    padding: 0 12px;
     background: rgba(34, 211, 238, 0.12);
     border: 1px solid var(--accent);
     border-radius: 8px;
     color: var(--accent);
     cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
     transition: all 0.2s;
   }
+  #share-btn .share-btn-label { white-space: nowrap; }
 
   #share-btn:hover {
     background: var(--accent);
