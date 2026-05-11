@@ -98,21 +98,68 @@ function renderChartLegend() {
 
 let _currentPanelIdx = null;
 
-// Static content shown for specific strategies in their detail panel.
-// Currently only 9sig has a content block (rules + rebalance log).
-const NINE_SIG_RULES_HTML = `
-  <div class="strategy-panel-section-label">9sig Rules</div>
-  <div class="strategy-rules">
-    &bull; Initial allocation: 60% TQQQ / 40% cash<br>
-    &bull; Signal line grows 9% per quarter<br>
-    &bull; Above signal &rarr; sell excess to cash<br>
-    &bull; Below signal &rarr; buy from cash to reach signal<br>
-    &bull; Monthly contributions go 100% to cash; signal line rises by 50% of new cash<br>
-    &bull; 90% buying power throttle &mdash; buy signals use at most 90% of cash<br>
-    &bull; 30-down no-sell &mdash; skip sell up to 2 consecutive quarters if TQQQ is 30%+ below its 2-year high<br>
-    &bull; Spike reset &mdash; if TQQQ doubles in a quarter and stock allocation stays 60&ndash;100% after rebalance, hard-reset to 60% TQQQ
-  </div>
-`;
+// Strategy rules panel for 9sig — recomputed each time it's rendered so it
+// reflects the user's current underlying, growth %, 30-down threshold, and
+// spike-reset trigger. Plain-English version designed so a non-technical
+// reader can follow it without referencing the original Jason Kelly book.
+function buildNineSigRulesHtml() {
+  const ul   = ((document.getElementById('select-9sig-underlying') || {}).value || 'tqqq').toUpperCase();
+  const g    = +((document.getElementById('select-9sig-growth')    || {}).value) || 9;
+  const name = (typeof nineSigName === 'function') ? nineSigName() : (g + 'sig');
+  const cd   = +((document.getElementById('select-9sig-crashdrop') || {}).value) || 30;
+  const sp   = +((document.getElementById('select-9sig-spike')     || {}).value);
+
+  const crashRule = cd >= 100
+    ? `<span style="color:var(--text-muted)">(30-down protection: off at ${cd}%)</span>`
+    : `When ${ul} is more than <b>${cd}%</b> below its 2-year high, <b>skip selling for up to two quarters in a row</b> — don't dump in a crash. After two skips, sell anyway.`;
+  const spikeRule = sp <= 0
+    ? `<span style="color:var(--text-muted)">(Spike-reset: off)</span>`
+    : `If ${ul} <b>gains more than ${sp}% in a single quarter</b> and you still hold ≥60% in it, hard-rebalance back to 60/40 — lock in the windfall.`;
+
+  return `
+    <div class="strategy-panel-section-label">${name} explained</div>
+    <div class="strategy-rules">
+      <div style="margin-bottom:10px;color:var(--text)">
+        <b>The idea:</b> each quarter, ${ul} should grow by ${g}%. If it grew faster, sell the excess to cash. If slower, buy more with cash. That's it.
+      </div>
+
+      <div style="margin-top:14px;font-weight:600;color:var(--text)">How it actually works</div>
+      <div style="margin-top:6px">
+        <b>1. Start.</b> Put 60% of your money in ${ul}, 40% in cash. Write down the value of the ${ul} side — that's your <b>target</b>.
+      </div>
+      <div style="margin-top:6px">
+        <b>2. Every quarter, before deciding anything:</b>
+        <ul style="margin:4px 0 0 18px;padding:0">
+          <li>Grow the target by <b>${g}%</b>.</li>
+          <li>If you added new cash this quarter (monthly contributions), raise the target by <b>half</b> of that new cash too.</li>
+        </ul>
+      </div>
+      <div style="margin-top:6px">
+        <b>3. Now check ${ul} against the target:</b>
+        <ul style="margin:4px 0 0 18px;padding:0">
+          <li><b>${ul} worth more than target?</b> Sell the excess back to cash.</li>
+          <li><b>${ul} worth less than target?</b> Buy more from cash to close the gap.</li>
+          <li><b>Equal?</b> Hold.</li>
+        </ul>
+      </div>
+
+      <div style="margin-top:14px;font-weight:600;color:var(--text)">Safety rails</div>
+      <div style="margin-top:6px">
+        &bull; <b>90% buying power.</b> A buy never spends more than 90% of your cash — you keep some dry powder.
+      </div>
+      <div style="margin-top:6px">
+        &bull; <b>30-down no-sell.</b> ${crashRule}
+      </div>
+      <div style="margin-top:6px">
+        &bull; <b>Spike reset.</b> ${spikeRule}
+      </div>
+
+      <div style="margin-top:14px;font-size:11px;color:var(--text-muted);line-height:1.5">
+        Monthly contributions always go straight to cash (never directly into ${ul}) — the quarterly rebalance is what moves money into stock. The target rising by half of new cash keeps it honest: half of every dollar you add is "expected" to flow into ${ul} eventually.
+      </div>
+    </div>
+  `;
+}
 
 function buildLogTableHtml(d) {
   if (!d || !d.log || !d.log.length) return '';
@@ -240,7 +287,7 @@ function renderStrategyPanelBody(idx) {
   }
   // 9sig-specific content: rules + quarterly rebalance log.
   if (idx === 0) {
-    html += `<div class="strategy-rules-wrap" style="margin-top:24px">${NINE_SIG_RULES_HTML}</div>`;
+    html += `<div class="strategy-rules-wrap" style="margin-top:24px">${buildNineSigRulesHtml()}</div>`;
     html += buildLogTableHtml(_logData);
   }
   body.innerHTML = html;
