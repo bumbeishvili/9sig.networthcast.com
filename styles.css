@@ -59,8 +59,57 @@
     gap: 24px;
   }
 
+  /* Layout collapses to single-column AND the share button + legend chips
+     get the same tablet-width treatment as phones — the previous 600px
+     breakpoint left a dead zone (600–900px) where the absolute-positioned
+     share button overlapped the title and 3-column chips squeezed names
+     to nothing. Most tablet-mode fixes belong here. */
   @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; }
+    .header { gap: 8px; margin-bottom: 14px; }
+    /* Pull share button out of absolute and stack it below the title. */
+    #share-btn {
+      position: static;
+      margin-top: 4px;
+      align-self: center;
+    }
+    /* Analytics modal: let the title row wrap, push strategy options + baseline
+       onto their own full-width rows, and let strategy options scroll
+       horizontally inside the row instead of wrapping awkwardly. */
+    .analytics-chart-title-row {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .analytics-chart-title-row h3 {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .analytics-strategy-options {
+      order: 10;
+      flex: 1 1 100%;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      scrollbar-width: none;
+    }
+    .analytics-strategy-options::-webkit-scrollbar { display: none; }
+    .analytics-strategy-options button { flex: 0 0 auto; white-space: nowrap; }
+    .analytics-baseline-wrap {
+      order: 11;
+      flex: 1 1 100%;
+      justify-content: space-between;
+    }
+    .analytics-metrics { gap: 6px; }
+  }
+  /* Phone-width: tighter padding, smaller fonts. */
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    .header h1 { font-size: 17px; }
+    .header p  { font-size: 11px; }
+    .panel { padding: 16px; }
+    .panel h2 { font-size: 12px; margin-bottom: 12px; }
+  }
+  @media (max-width: 400px) {
+    .header h1 { font-size: 15px; }
   }
 
   .site-footer {
@@ -729,7 +778,10 @@
   .heatmap-tooltip {
     position: fixed;
     z-index: 200;
-    pointer-events: none;
+    /* Pointer-events: auto so the close button is clickable. On desktop,
+       hover behavior is driven by mousemove on the grid, not on the
+       tooltip itself, so allowing pointer events here doesn't interfere. */
+    pointer-events: auto;
     background: var(--surface);
     border: 1px solid rgba(34, 211, 238, 0.4);
     border-radius: 6px;
@@ -740,6 +792,37 @@
     color: var(--text);
     line-height: 1.5;
     max-width: 420px;
+  }
+  /* Close button inside the tooltip — hidden by default (desktop just uses
+     hover/leave to manage visibility), shown on touch / coarse-pointer
+     devices where the tooltip stays sticky until dismissed. */
+  .heatmap-tooltip .tt-close {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .heatmap-tooltip .tt-close:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  @media (hover: none), (max-width: 600px) {
+    .heatmap-tooltip .tt-close { display: inline-flex; }
+    .heatmap-tooltip { max-width: calc(100vw - 24px); }
+    /* Period row needs extra right padding so the close button doesn't
+       overlap the "DD" badge. */
+    .heatmap-tooltip .tt-period { padding-right: 32px; }
   }
   .heatmap-tooltip[hidden] { display: none; }
   .heatmap-tooltip .tt-period {
@@ -945,9 +1028,13 @@
 
   /* Compact strategy legend strip above the chart. Each chip combines
      visibility toggle (eye), color dot, name, and annualized CAGR. */
+  /* Chips size to their content with flex-wrap — no fixed column count. Each
+     chip grows to fill its row but has a minimum width so names never get
+     ellipsis'd into nothing. Wide viewports pack many per row; narrow ones
+     wrap to fewer columns automatically. */
   .chart-legend {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 12px;
   }
@@ -964,8 +1051,9 @@
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, opacity 0.15s;
     user-select: none;
-    /* Without min-width:0 the long-name chips would refuse to shrink and
-       blow out the column. */
+    /* Flex sizing — minimum width holds the name + 2-line metrics block,
+       and chips grow to fill the row evenly via flex-grow. */
+    flex: 1 1 230px;
     min-width: 0;
   }
   /* Push CAGR + more-button to the right edge so the column lines up
@@ -1444,21 +1532,21 @@
     border-radius: 6px;
   }
 
+  /* Icon-only share button — just the share glyph, no text label. */
   #share-btn {
     position: absolute;
     top: 0;
     right: 0;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 6px 14px;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
     background: rgba(34, 211, 238, 0.12);
     border: 1px solid var(--accent);
     border-radius: 8px;
     color: var(--accent);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
-    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
   }

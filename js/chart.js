@@ -568,6 +568,10 @@ function render() {
     afterDraw(c) {
       const { ctx: cx, chartArea: area } = c;
       if (!area) return;
+      // On phone-width viewports the end-of-line labels are suppressed —
+      // the legend chips above already show name + CAGR + DD, and reclaiming
+      // the right margin gives the actual plot a usable width.
+      if (window.innerWidth <= 600) return;
       const lastIdx = c.data.labels.length - 1;
       if (lastIdx < 0) return;
 
@@ -950,7 +954,11 @@ function render() {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      layout: { padding: { right: 120 } },
+      // Reserve space on the right edge for the end-of-line strategy labels.
+      // On phone-width viewports the labels are hidden by the endLabels plugin
+      // (legend chips above already convey the same info), so we reclaim that
+      // space for the actual plot area.
+      layout: { padding: { right: window.innerWidth <= 600 ? 8 : 120 } },
       plugins: {
         legend: { display: false }, // replaced with custom #chart-legend chips
         tooltip: {

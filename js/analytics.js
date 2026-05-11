@@ -501,6 +501,7 @@ document.addEventListener('change', (e) => {
     const ddStr = Number.isFinite(maxDD) && maxDD > 0 ? '−' + (maxDD * 100).toFixed(1) + '%' : '0.0%';
 
     tooltip.innerHTML = `
+      <button class="tt-close" type="button" aria-label="Close" data-tt-close>&times;</button>
       <div class="tt-period">
         <span>${stratLabel} &middot; INVESTED ${startYear} &middot; ${period}Y</span>
         <span class="tt-dd">DD ${ddStr}</span>
@@ -510,30 +511,72 @@ document.addEventListener('change', (e) => {
     `;
   }
 
-  grid.addEventListener('mousemove', (e) => {
-    // Spiral mode owns its own tooltip lifecycle on each <rect>; don't let
-    // this grid-level handler hide what the spiral just showed.
-    if (e.target && e.target.closest && e.target.closest('.spiral-svg')) return;
-    const cell = e.target.closest('td.heatmap-cell, th[data-r], th[data-c]');
-    if (!cell || !grid.contains(cell)) {
+  // Touch / coarse-pointer devices don't get hover events reliably — tapping
+  // a cell fires emulated mousemove + mouseleave in quick succession which
+  // would flash the tooltip closed. Detect once and switch to a sticky,
+  // click-driven flow on those devices.
+  const isTouch = window.matchMedia && window.matchMedia('(hover: none)').matches;
+
+  if (!isTouch) {
+    grid.addEventListener('mousemove', (e) => {
+      // Spiral mode owns its own tooltip lifecycle on each <rect>; don't let
+      // this grid-level handler hide what the spiral just showed.
+      if (e.target && e.target.closest && e.target.closest('.spiral-svg')) return;
+      const cell = e.target.closest('td.heatmap-cell, th[data-r], th[data-c]');
+      if (!cell || !grid.contains(cell)) {
+        clearHighlights();
+        hideTooltip();
+        return;
+      }
+      clearHighlights();
+      applyHighlights(cell.dataset.r, cell.dataset.c);
+      if (cell.matches('td.heatmap-cell:not(.empty)') && cell.dataset.value != null) {
+        fillTooltip(cell);
+        tooltip.removeAttribute('hidden');
+        positionTooltip(cell, e);
+      } else {
+        hideTooltip();
+      }
+    });
+    grid.addEventListener('mouseleave', () => {
       clearHighlights();
       hideTooltip();
-      return;
-    }
+    });
+  }
+
+  // Click handler — primary trigger on touch devices, also active on desktop
+  // (a tap or stylus click works the same as hover there).
+  grid.addEventListener('click', (e) => {
+    if (e.target && e.target.closest && e.target.closest('.spiral-svg')) return;
+    const cell = e.target.closest('td.heatmap-cell:not(.empty)');
+    if (!cell || !grid.contains(cell) || cell.dataset.value == null) return;
     clearHighlights();
     applyHighlights(cell.dataset.r, cell.dataset.c);
-    if (cell.matches('td.heatmap-cell:not(.empty)') && cell.dataset.value != null) {
-      fillTooltip(cell);
-      tooltip.removeAttribute('hidden');
-      positionTooltip(cell, e);
-    } else {
+    fillTooltip(cell);
+    tooltip.removeAttribute('hidden');
+    positionTooltip(cell, e);
+  });
+
+  // Close button (rendered inside fillTooltip's HTML) — hides the sticky
+  // tooltip on touch devices. Also handles the case where it's tapped on
+  // desktop.
+  tooltip.addEventListener('click', (e) => {
+    if (e.target && e.target.closest && e.target.closest('[data-tt-close]')) {
+      clearHighlights();
       hideTooltip();
     }
   });
-  grid.addEventListener('mouseleave', () => {
-    clearHighlights();
-    hideTooltip();
-  });
+
+  // Tap outside the heatmap on touch devices → dismiss sticky tooltip.
+  if (isTouch) {
+    document.addEventListener('click', (e) => {
+      if (tooltip.hasAttribute('hidden')) return;
+      if (e.target.closest('#heatmap-tooltip')) return;
+      if (e.target.closest('#analytics-heatmap')) return;
+      clearHighlights();
+      hideTooltip();
+    });
+  }
 })();
 
 // Called from chart.js render() after a parameter change. Debounced so the
