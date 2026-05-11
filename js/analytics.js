@@ -12,7 +12,10 @@
 // chart's "Invested Compounded" line, cells are directly comparable across
 // columns of very different absolute scale.
 
-const ANALYTICS_MAX_PERIOD = 40;
+// Heatmap period columns: full data range. With 1938→present data this
+// is ~88 columns and naturally grows by 1 each year. The per-row sim
+// optimization keeps build time linear in years, so even at the maximum
+// triangular cell count (~years²/2) the build stays fast.
 
 const STRATEGY_LABELS = {
   'adaptive': 'Adaptive',
@@ -1455,7 +1458,7 @@ async function buildHeatmap() {
   const minYear = allYears[0];
   const maxYear = allYears[allYears.length - 1];
   const periods = [];
-  for (let p = 1; p <= ANALYTICS_MAX_PERIOD && p <= (maxYear - minYear); p++) periods.push(p);
+  for (let p = 1; p <= (maxYear - minYear); p++) periods.push(p);
 
   // Build the list of valid (startYear, period) cells. The row is the year
   // you started investing; the column is "N years later". Entry anchors at
