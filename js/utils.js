@@ -29,6 +29,26 @@ function initialToSlider(v) {
   return Math.round(((logVal - minLog) / (maxLog - minLog)) * 1000);
 }
 
+// Quadratic-curve mapping for the cash-interest-rate slider: slider position
+// 0–1000 maps to rate 0–100 %. The squared curve packs fine resolution into
+// the realistic 0–10 % range (where most users live) while the upper third
+// of the slider sweeps quickly through extreme rates — "moves faster at the
+// end" per the design intent.
+//   slider 200  ≈  4 %
+//   slider 500  =  25 %
+//   slider 707  ≈  50 %
+//   slider 1000 = 100 %
+function sliderToRate(s) {
+  if (s <= 0) return 0;
+  const norm = Math.max(0, Math.min(1, s / 1000));
+  return norm * norm * 100;
+}
+function rateToSlider(r) {
+  if (r <= 0) return 0;
+  const norm = Math.sqrt(Math.max(0, Math.min(100, r)) / 100);
+  return Math.round(norm * 1000);
+}
+
 function fmt(n) {
   const sign = n < 0 ? '-' : '';
   const abs = Math.abs(n);

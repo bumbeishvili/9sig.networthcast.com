@@ -411,7 +411,7 @@ document.addEventListener('change', (e) => {
     case 'initial': fireInput('slider-initial', initialToSlider(value)); break;
     case 'monthly': fireInput('slider-monthly', value); break;
     case 'raise':   fireInput('slider-raise',   value); break;
-    case 'rate':    fireInput('slider-rate',    value); break;
+    case 'rate':    fireInput('slider-rate',    rateToSlider(value)); break;
     case 'tu':      fireChange('select-tqqq-above',  value); break;
     case 'td':      fireChange('select-tqqq-below',  value); break;
     case 'tw':      fireChange('select-tqqq-window', value); break;
@@ -595,7 +595,7 @@ const METRIC_OPTS = {
   initial: [0, 100, 500, 1000, 2000, 3000, 5000, 7500, 10000, 15000, 20000, 25000, 35000, 50000, 75000, 100000, 150000, 200000, 250000, 350000, 500000, 750000, 1000000, 1500000, 2000000, 3000000, 5000000, 10000000],
   monthly: [0, 50, 100, 150, 200, 250, 300, 400, 500, 600, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000, 7500, 10000, 15000, 20000, 25000, 50000, 100000],
   raise:   [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 10, 12, 15, 20],
-  rate:    [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 10, 12, 15],
+  rate:    [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100],
   tu:      [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.4, 2.5, 2.7, 3.0, 3.3, 3.5, 4.0, 4.5, 5.0],
   td:      [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.3, 2.5, 3.0],
   tw:      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 18, 20, 22, 25, 28, 30],
@@ -806,7 +806,7 @@ function getCellSim(startYear, period) {
   const initial      = sliderToInitial(+document.getElementById('slider-initial').value);
   const monthly      = +document.getElementById('slider-monthly').value;
   const annualRaise  = +document.getElementById('slider-raise').value / 100;
-  const rate         = +document.getElementById('slider-rate').value / 100;
+  const rate         = sliderToRate(+document.getElementById('slider-rate').value) / 100;
   const tqqqAbove    = +document.getElementById('select-tqqq-above').value;
   const tqqqBelow    = +document.getElementById('select-tqqq-below').value;
   const tqqqWindow   = +document.getElementById('select-tqqq-window').value;
@@ -847,7 +847,7 @@ function getYearStartSim(startYear) {
   const initial      = sliderToInitial(+document.getElementById('slider-initial').value);
   const monthly      = +document.getElementById('slider-monthly').value;
   const annualRaise  = +document.getElementById('slider-raise').value / 100;
-  const rate         = +document.getElementById('slider-rate').value / 100;
+  const rate         = sliderToRate(+document.getElementById('slider-rate').value) / 100;
   const tqqqAbove    = +document.getElementById('select-tqqq-above').value;
   const tqqqBelow    = +document.getElementById('select-tqqq-below').value;
   const tqqqWindow   = +document.getElementById('select-tqqq-window').value;
@@ -1396,7 +1396,7 @@ async function buildHeatmap() {
   const initial = sliderToInitial(+document.getElementById('slider-initial').value);
   const monthly = +document.getElementById('slider-monthly').value;
   const annualRaise = +document.getElementById('slider-raise').value / 100;
-  const rate = +document.getElementById('slider-rate').value / 100;
+  const rate = sliderToRate(+document.getElementById('slider-rate').value) / 100;
   const tqqqAboveMult = +document.getElementById('select-tqqq-above').value;
   const tqqqBelowMult = +document.getElementById('select-tqqq-below').value;
   const tqqqWindow    = +document.getElementById('select-tqqq-window').value;

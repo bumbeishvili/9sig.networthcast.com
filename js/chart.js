@@ -318,7 +318,7 @@ function render() {
   const initial = sliderToInitial(+document.getElementById('slider-initial').value);
   const monthly = +document.getElementById('slider-monthly').value;
   const annualRaise = +document.getElementById('slider-raise').value / 100;
-  const rate = +document.getElementById('slider-rate').value / 100;
+  const rate = sliderToRate(+document.getElementById('slider-rate').value) / 100;
   const logScale = document.getElementById('chart-log-toggle').getAttribute('aria-pressed') === 'true';
   const tqqqAboveMult = +document.getElementById('select-tqqq-above').value;  // e.g. 2.0× = TQQQ is 2× of 9sig
   const tqqqBelowMult = +document.getElementById('select-tqqq-below').value;  // e.g. 1.2× = 9sig is 1.2× of TQQQ

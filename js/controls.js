@@ -5,7 +5,14 @@ const LS_KEY = '9sig-sliders';
 
 function saveSliders() {
   const vals = {};
-  SLIDER_IDS.forEach(id => vals[id] = document.getElementById(id).value);
+  SLIDER_IDS.forEach(id => {
+    let v = document.getElementById(id).value;
+    // Persist the rate as its actual percentage value rather than the raw
+    // slider position — keeps storage stable across slider-curve changes and
+    // backward-compatible with the old linear slider (which also stored %).
+    if (id === 'slider-rate') v = String(sliderToRate(+v));
+    vals[id] = v;
+  });
   vals['toggle-envelope'] = document.getElementById('toggle-envelope').checked;
   vals['toggle-log-scale'] =
     document.getElementById('chart-log-toggle').getAttribute('aria-pressed') === 'true';
@@ -264,7 +271,9 @@ function shareConfig() {
   params.set('i', get('slider-initial').value);
   params.set('m', get('slider-monthly').value);
   params.set('a', get('slider-raise').value);
-  params.set('r', get('slider-rate').value);
+  // Share the rate as percent (matches old-format share URLs and is stable
+  // across slider-curve changes).
+  params.set('r', String(sliderToRate(+get('slider-rate').value)));
   params.set('e', get('slider-entry').value);
   params.set('x', get('slider-exit').value);
 

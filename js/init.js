@@ -46,7 +46,12 @@
   let hasUrlParams = false;
   for (const [key, sliderId] of Object.entries(urlMap)) {
     const val = params.get(key);
-    if (val !== null) { document.getElementById(sliderId).value = val; hasUrlParams = true; }
+    if (val !== null) {
+      // URL `r` is always the rate %, regardless of slider-curve format.
+      const sliderVal = (sliderId === 'slider-rate') ? rateToSlider(+val) : val;
+      document.getElementById(sliderId).value = sliderVal;
+      hasUrlParams = true;
+    }
   }
 
   // Adaptive strategy params
@@ -78,7 +83,12 @@
     try {
       const saved = JSON.parse(localStorage.getItem(LS_KEY));
       if (saved) {
-        SLIDER_IDS.forEach(id => { if (saved[id] != null) document.getElementById(id).value = saved[id]; });
+        SLIDER_IDS.forEach(id => {
+          if (saved[id] == null) return;
+          // localStorage `slider-rate` is the rate %, not the slider position.
+          const v = (id === 'slider-rate') ? rateToSlider(+saved[id]) : saved[id];
+          document.getElementById(id).value = v;
+        });
         if (saved['toggle-envelope'] != null) document.getElementById('toggle-envelope').checked = !!saved['toggle-envelope'];
         if (saved['toggle-log-scale'] != null) setLogScale(!!saved['toggle-log-scale']);
         const advancedSaved = saved['advanced-open'];

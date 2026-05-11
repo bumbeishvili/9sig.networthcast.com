@@ -58,7 +58,9 @@
       <div class="control-group">
         <label>Cash Interest Rate (Annual)</label>
         <div class="value-display" id="disp-rate">4.0%</div>
-        <input type="range" id="slider-rate" min="0" max="40" step="0.25" value="4">
+        <!-- 0–1000 slider position, mapped through sliderToRate() to a 0–100% rate
+             with a quadratic curve (fine resolution near 0, big steps near 100). -->
+        <input type="range" id="slider-rate" min="0" max="1000" step="1" value="200">
       </div>
 
     </div>
