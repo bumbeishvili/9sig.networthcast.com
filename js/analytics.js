@@ -1708,10 +1708,17 @@ async function buildHeatmap() {
   // (no prior year exists), we fall back to the first quarter of the starting
   // year. We include the latest year (maxYear) even when only partial data
   // exists for it — its row will just show fewer columns / partial-year values.
-  // Floor entry by the most-restrictive of (selected strategy, selected
-  // baseline). E.g. picking B&H SOXL as the strategy skips rows before 1994
-  // since SOXL has no pre-1994 history.
-  const floorEntryIdx = effectiveEntryMinQIdx([analyticsStrategy, analyticsBaseline].filter(Boolean));
+  // Floor entry by the most-restrictive of (selected heatmap strategy,
+  // selected heatmap baseline) — and ONLY those. The main chart's legend
+  // visibility is independent: hiding SOXL on the main chart shouldn't shrink
+  // the heatmap, and showing it shouldn't shrink it either unless the heatmap
+  // itself is using SOXL data.
+  let floorEntryIdx = 0;
+  for (const k of [analyticsStrategy, analyticsBaseline]) {
+    if (!k) continue;
+    const e = (typeof earliestQIdxOf === 'function') ? earliestQIdxOf(k) : 0;
+    if (e > floorEntryIdx) floorEntryIdx = e;
+  }
 
   const cells = [];
   for (let sy = maxYear; sy >= minYear; sy--) {
