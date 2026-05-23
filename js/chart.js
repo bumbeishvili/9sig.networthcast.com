@@ -1045,7 +1045,9 @@ function render() {
   // sidebar selectors instead.
   const LBL_9SIG = '9sig';
   const LBL_SMA  = 'SMA';
-  const LBL_BH   = 'Buy & Hold';
+  // Buy & Hold spells out the underlying it's actually holding (default TQQQ →
+  // "Buy & Hold TQQQ"; follows #select-bh-underlying when switched).
+  const LBL_BH   = 'Buy & Hold ' + bhKey.toUpperCase();
   const LBL_INV  = 'Invested Compounded';
   bhPicked.label = LBL_BH;
 

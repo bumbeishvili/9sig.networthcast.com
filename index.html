@@ -31,7 +31,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
 
@@ -747,16 +747,20 @@
   </div>
 </div>
 
-<script src="js/data.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/simulate.js"></script>
-<script src="js/metrics.js"></script>
-<script src="js/chart.js"></script>
-<script src="js/controls.js"></script>
-<script src="js/analytics.js"></script>
-<script src="js/preview-dropdown.js"></script>
-<script src="js/saved-configs.js"></script>
-<script src="js/init.js"></script>
+<!-- Cache-busting: bump ?v= whenever any js/*.js or styles.css changes, so
+     returning browsers fetch the new files instead of serving stale cached
+     copies (a stale JS file against fresh HTML throws null-element errors).
+     Keep this in sync with APP_VERSION in controls.js. -->
+<script src="js/data.js?v=11"></script>
+<script src="js/utils.js?v=11"></script>
+<script src="js/simulate.js?v=11"></script>
+<script src="js/metrics.js?v=11"></script>
+<script src="js/chart.js?v=11"></script>
+<script src="js/controls.js?v=11"></script>
+<script src="js/analytics.js?v=11"></script>
+<script src="js/preview-dropdown.js?v=11"></script>
+<script src="js/saved-configs.js?v=11"></script>
+<script src="js/init.js?v=11"></script>
 
 </body>
 </html>

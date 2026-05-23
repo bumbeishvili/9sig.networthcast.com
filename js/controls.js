@@ -9,6 +9,9 @@ const LS_KEY = '9sig-sliders';
 // the new defaults. If they've never visited before (no stored version),
 // we just record the current one without prompting.
 const APP_VERSION = 11; // bumped when 9sig buy-power cap became configurable
+// NOTE: when you change any js/*.js or styles.css, also bump the matching ?v=
+// cache-bust query on the <script>/<link> tags in index.html (keep it equal to
+// APP_VERSION) so returning browsers fetch the new files instead of stale cache.
 const LS_VERSION_KEY = '9sig-app-version';
 // '9sig-saved-configs' holds user-saved strategies (saved-configs.js). Base
 // line-colour overrides and the alternate-runs toggle are session-only, so the

@@ -78,7 +78,7 @@ async function run() {
   section('save / edit a 9sig strategy');
   await fresh(page);
   const names = await page.evaluate(() => [...document.querySelectorAll('#chart-legend .legend-name')].map(n => n.textContent));
-  ck('legend names are static', JSON.stringify(names) === JSON.stringify(['9sig', 'SMA', 'Buy & Hold', 'Invested Compounded']), JSON.stringify(names));
+  ck('legend names are static', JSON.stringify(names) === JSON.stringify(['9sig', 'SMA', 'Buy & Hold TQQQ', 'Invested Compounded']), JSON.stringify(names));
   await openMain(page);
   const def = await mainLast(page);
   await setSel(page, 'select-9sig-growth', '20');
