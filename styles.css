@@ -550,6 +550,19 @@
   }
   .analytics-sentence select:hover { border-color: var(--accent); }
   .analytics-sentence select:focus { outline: none; border-color: var(--accent); }
+  /* Inline investment dropdowns ("…entry amount of [X]…"). */
+  .analytics-sentence .as-slot { display: inline-flex; }
+  .analytics-sentence .metric-select {
+    padding: 3px 6px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font: 700 11px 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .analytics-sentence .metric-select.as-metric--dim { opacity: 0.5; }
   .analytics-baseline-wrap {
     display: inline-flex;
     align-items: center;

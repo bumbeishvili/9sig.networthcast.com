@@ -326,8 +326,11 @@ async function run() {
     const stratSavedGroup = stratSel.querySelector('optgroup[label="Saved"]');
     const baseSavedGroup  = baseSel.querySelector('optgroup[label="Saved"]');
     const baseCustomGroup = baseSel.querySelector('optgroup[label="Custom"]');
+    const sentEl = document.getElementById('analytics-sentence');
+    const investInSentence = ['initial', 'monthly', 'raise'].every(k => !!sentEl.querySelector(`.metric-select[data-metric-key="${k}"]`));
     return {
-      sentenceOk: /Visualize/.test(sentence) && /vs performance of/.test(sentence),
+      sentenceOk: /Visualize/.test(sentence) && /vs performance of/.test(sentence) && /entry amount of/.test(sentence) && /monthly investment of/.test(sentence) && /increasing yearly by/.test(sentence),
+      investInSentence,
       noSavedLabel: !document.querySelector('.analytics-strat-sep'),
       builtinMatch, someBuiltinHidden,
       stratSavedOpts: stratSavedGroup ? stratSavedGroup.querySelectorAll('option').length : 0,
@@ -337,7 +340,8 @@ async function run() {
       hasCustomPct:    !!(baseCustomGroup && [...baseCustomGroup.querySelectorAll('option')].some(o => o.value === 'custom-pct')),
     };
   });
-  ck('header reads as a sentence (Visualize … vs performance of …)', pickers.sentenceOk, JSON.stringify(pickers));
+  ck('header reads as a sentence (Visualize … vs … with entry/monthly/raise)', pickers.sentenceOk, JSON.stringify(pickers));
+  ck('investment dropdowns (initial/monthly/raise) are inline in the sentence', pickers.investInSentence);
   ck('the "SAVED" divider chip is gone', pickers.noSavedLabel);
   ck('Visualize dropdown built-ins match main-chart visibility', pickers.builtinMatch, JSON.stringify(pickers));
   ck('Visualize dropdown omits built-ins not visible on the main chart', pickers.someBuiltinHidden, JSON.stringify(pickers));

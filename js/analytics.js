@@ -951,11 +951,31 @@ function strategyParamPillsHtml(key) {
   return isCfgKey(key) ? cfgParamPillsHtml(cfgFromKey(key)) : builtinParamPillsHtml(key);
 }
 
+// A bare value-dropdown for the investment clause of the sentence ("…the entry
+// amount of [X]…"). Reuses the metric-select change handler (which drives the
+// page slider) via the data-metric-key; numeric options only.
+function sentenceMetricSelect(key, current, fmt, dim) {
+  const base = METRIC_OPTS[key].slice();
+  const same = (a, b) => Math.abs(a - b) < 1e-9;
+  if (current != null && !base.some(v => same(v, current))) base.push(current);
+  base.sort((a, b) => a - b);
+  const opts = base.map(v => `<option value="${v}"${current != null && same(v, current) ? ' selected' : ''}>${fmt(v)}</option>`).join('');
+  return `<select class="metric-select as-metric${dim ? ' as-metric--dim' : ''}" data-metric-key="${key}" title="Applies to every strategy in the run">${opts}</select>`;
+}
+
 function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, strategy) {
   const m = document.getElementById('analytics-metrics');
   if (!m) return;
   const pct = (x) => (x % 1 === 0 ? x.toFixed(0) : x.toFixed(1)) + '%';
   const dimRate = (initial <= 0 && monthly <= 0);
+
+  // Investment inputs live inline in the sentence ("…with the entry amount of
+  // [X] and monthly investment of [Y] increasing yearly by [Z]"). They apply to
+  // every strategy in the run; editing one drives the matching page slider.
+  const setSlot = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  setSlot('analytics-initial-slot', sentenceMetricSelect('initial', initial, fmtFull, initial <= 0));
+  setSlot('analytics-monthly-slot', sentenceMetricSelect('monthly', monthly, fmtFull, monthly <= 0));
+  setSlot('analytics-raise-slot',   sentenceMetricSelect('raise', annualRaise * 100, pct, monthly <= 0 || annualRaise <= 0));
 
   // First strategy's own parameters. (Global investment inputs — Initial /
   // Monthly / Annual raise — live in the sidebar; they're not repeated here.)
