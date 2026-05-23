@@ -1184,7 +1184,8 @@ function renderCustomBuilder() {
     inner = `
       <div class="builder-modal">
         <div class="sc-modal-title">Describe your strategy</div>
-        <div class="builder-help">In plain English, describe your strategy in as much detail as you can — which assets (TQQQ, QQQ, SPY, QQQ5), entry/exit rules, thresholds, and how monthly contributions are handled.</div>
+        <div class="wip-note">⚠ Custom strategies are a work in progress — their results may still change.</div>
+        <div class="builder-help">In plain English, describe your strategy in as much detail as you can. You can base it on any of these tickers — <b>TQQQ</b>, <b>QQQ</b>, <b>SPY</b>, <b>QQQ5</b> — plus entry/exit rules, thresholds, and how monthly contributions are handled.</div>
         <textarea id="builder-desc" class="builder-textarea" placeholder="e.g. Hold TQQQ. At each month-end, if QQQ closed below its 200-day moving average, move everything to cash; when it closes back above, buy TQQQ again. Add the monthly contribution to whatever I'm holding.">${_escHtml(cfg.desc || '')}</textarea>
         <div class="builder-actions">
           <button type="button" class="sc-modal-btn" data-builder-cancel>Cancel</button>
@@ -1709,6 +1710,8 @@ function renderCustomPanelBody(cfgId) {
 
   let html = '';
 
+  html += `<div class="wip-note">⚠ Custom strategies are a work in progress — their results may still change.</div>`;
+  html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qqq</code>, <code>spy</code>, <code>qqq5</code> (daily closes). Base your rules on any of them.</div>`;
   html += `<button type="button" id="custom-edit-builder" class="custom-edit-btn">Edit strategy</button>`;
   if (cfg.desc) html += `<div class="custom-desc-readout">${_escHtml(cfg.desc)}</div>`;
   if (err) html += `<div class="custom-error"><b>Couldn't run it:</b> ${_escHtml(err)} <span class="custom-error-hint">— click Edit strategy to fix the code.</span></div>`;

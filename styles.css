@@ -1684,6 +1684,36 @@
   }
   .custom-error-hint { color: var(--text-muted); font-weight: 400; }
 
+  /* "Work in progress" banner shown on not-yet-finalized strategies (SMA, custom). */
+  .wip-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0 0 12px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    font: 600 11px 'DM Sans', sans-serif;
+    color: #fbbf24;
+    line-height: 1.45;
+  }
+  /* Which tickers a custom strategy can read (TQQQ / QQQ / SPY / QQQ5). */
+  .custom-tickers-note {
+    margin: 0 0 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+  .custom-tickers-note code {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    background: var(--surface2);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 10px;
+  }
+
   /* + Custom strategy button (Parameters panel) */
   .new-custom-btn {
     margin-top: 12px;
