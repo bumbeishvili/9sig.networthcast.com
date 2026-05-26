@@ -95,6 +95,26 @@ ck('SMA always-out, 0 rate → stays 1000 (cash)', approx(simulateSMA(1000, 0, 0
 install(dblP); global.smaAtMonthlyByKey = { 'qqq_200': new Array(24).fill(1) };
 ck('SMA always-in, doubling underlying → 2000', approx(simulateSMA(1000, 0, 0, 0, last, 0, { smaAsset: 'qqq', smaWindow: 200, underlyingCol: 1 }).smaPoints.at(-1).value, 2000));
 
+// ----- SMA: out-asset, DCA ladders, bodyguard -----
+// SMA always-out + outAsset = qqq → fully invested in QQQ on price doubling.
+// Same prices as dblP (100 → 200), so $1000 lump → $2000.
+install(dblP); global.smaAtMonthlyByKey = { 'qqq_200': new Array(24).fill(1e9), 'spy_200': new Array(24).fill(1e9) };
+ck('SMA always-out + outAsset=qqq, doubling → 2000 (full QQQ exposure)',
+   approx(simulateSMA(1000, 0, 0, 0, last, 0, { smaAsset: 'qqq', smaWindow: 200, underlyingCol: 1, outAsset: 'qqq' }).smaPoints.at(-1).value, 2000));
+// Always-in + DCA-in 12mo on a doubling underlying (price 100→200 step at month 3):
+// shouldn't matter — we start "in" so the first month deploys fully via the seed.
+// Then on stable prices, DCA-in has no effect once in.
+install(dblP); global.smaAtMonthlyByKey = { 'qqq_200': new Array(24).fill(1) };
+ck('SMA always-in + dcaInMonths=12 → still doubles (seed bypasses ladder)',
+   approx(simulateSMA(1000, 0, 0, 0, last, 0, { smaAsset: 'qqq', smaWindow: 200, underlyingCol: 1, dcaInMonths: 12 }).smaPoints.at(-1).value, 2000));
+// Bodyguard GTFO: SMA always-in, but signal-asset (qqq) is wildly above its SMA → bgGtfo forces cash.
+// We rig: smaAtMonthlyByKey['qqq_200'] = 1 (so primary signal stays "in" — price > 1), AND we ALSO set
+// the bodyguard branch to use 'qqq_200' (default for underlyingCol=1 = tqqq → unleveraged = qqq).
+// Underlying price (col 1 = TQQQ) = 100..200 throughout. unleveraged QQQ price = same column (synth data).
+// So aboveBy = (200/1 - 1)*100 = 19900% → trivially > any threshold → bgGtfo trips immediately.
+ck('SMA always-in + bgGtfo=30 → forced to cash, no doubling',
+   simulateSMA(1000, 0, 0, 0, last, 0, { smaAsset: 'qqq', smaWindow: 200, underlyingCol: 1, bgGtfoPct: 30 }).smaPoints.at(-1).value < 1100);
+
 // ----- #1 signal growth is LITERAL per rebalance period -----
 install(flat);
 r = simulate(1000, 0, 0, 0, last, 0, { qGrowth: 0.09 });

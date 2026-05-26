@@ -37,11 +37,11 @@
     'select-sma-exit-buf':    { kind: 'sma', apply: (p, v) => { p.exitBufferPct = +v; } },
     'select-sma-rsi-oh':      { kind: 'sma', apply: (p, v) => { p.rsiOverheatThreshold = +v; } },
     'select-sma-rsi-cool':    { kind: 'sma', apply: (p, v) => { p.rsiCoolThreshold = +v; } },
-    'select-sma-dip-init':    { kind: 'sma', apply: (p, v) => { p.dipInitialPct = +v; } },
-    'select-sma-dip-r1-drop': { kind: 'sma', apply: (p, v) => { p.dipR1Drop = +v; } },
-    'select-sma-dip-r1-add':  { kind: 'sma', apply: (p, v) => { p.dipR1Add = +v; } },
-    'select-sma-dip-r2-drop': { kind: 'sma', apply: (p, v) => { p.dipR2Drop = +v; } },
-    'select-sma-dip-r2-add':  { kind: 'sma', apply: (p, v) => { p.dipR2Add = +v; } },
+    'select-sma-out-asset':   { kind: 'sma', apply: (p, v) => { p.outAsset = v; } },
+    'select-sma-dca-in':      { kind: 'sma', apply: (p, v) => { p.dcaInMonths = +v; } },
+    'select-sma-dca-to-out':  { kind: 'sma', apply: (p, v) => { p.dcaToOutMonths = +v; } },
+    'select-sma-bg-delev':    { kind: 'sma', apply: (p, v) => { p.bgDelevPct = +v; } },
+    'select-sma-bg-gtfo':     { kind: 'sma', apply: (p, v) => { p.bgGtfoPct = +v; } },
   };
   const PREVIEW_SELECT_IDS = Object.keys(PREVIEW_SELECTS);
 
@@ -93,11 +93,11 @@
       exitBufferPct:  _num('select-sma-exit-buf', 0),
       rsiOverheatThreshold: _num('select-sma-rsi-oh', 0),
       rsiCoolThreshold: _num('select-sma-rsi-cool', 0),
-      dipInitialPct: _num('select-sma-dip-init', 100),
-      dipR1Drop:     _num('select-sma-dip-r1-drop', 0),
-      dipR1Add:      _num('select-sma-dip-r1-add', 0),
-      dipR2Drop:     _num('select-sma-dip-r2-drop', 0),
-      dipR2Add:      _num('select-sma-dip-r2-add', 0),
+      outAsset: _str('select-sma-out-asset', 'cash'),
+      dcaInMonths: _num('select-sma-dca-in', 0),
+      dcaToOutMonths: _num('select-sma-dca-to-out', 0),
+      bgDelevPct: _num('select-sma-bg-delev', 0),
+      bgGtfoPct:  _num('select-sma-bg-gtfo', 0),
     });
   }
 
@@ -115,8 +115,8 @@
       smaAsset: p.smaAsset, smaWindow: p.smaWindow, underlyingCol: p.underlyingCol,
       entryBufferPct: p.entryBufferPct, exitBufferPct: p.exitBufferPct,
       rsiOverheatThreshold: p.rsiOverheatThreshold, rsiCoolThreshold: p.rsiCoolThreshold,
-      dipInitialPct: p.dipInitialPct, dipR1Drop: p.dipR1Drop, dipR1Add: p.dipR1Add,
-      dipR2Drop: p.dipR2Drop, dipR2Add: p.dipR2Add,
+      outAsset: p.outAsset, dcaInMonths: p.dcaInMonths, dcaToOutMonths: p.dcaToOutMonths,
+      bgDelevPct: p.bgDelevPct, bgGtfoPct: p.bgGtfoPct,
     });
     return (r.smaPoints && r.smaPoints.length) ? r.smaPoints[r.smaPoints.length - 1].value : 0;
   }

@@ -31,7 +31,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=13">
+<link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
 
@@ -695,65 +695,71 @@
       <span class="info-icon" tabindex="0" data-tip="Annual interest the SMA strategy's cash earns while it sits out of the market. Independent of the 9sig and Invested Compounded rates.">ⓘ</span>
     </div>
 
-    <div class="strategy-panel-section-label" style="margin-top:18px">Stage your buying (optional)</div>
-    <div style="font-size:11px;color:var(--text);line-height:1.5;margin-bottom:10px">
-      By default, the moment the SMA says "buy" you go 100% into TQQQ. This
-      section lets you split that buy across multiple steps — put some in
-      immediately, hold the rest in cash, then deploy more as TQQQ keeps
-      falling. <b>It only matters when the first selector is below 100%.</b>
-    </div>
+    <div class="strategy-panel-section-label" style="margin-top:18px">Where to park during a SELL</div>
     <div class="adaptive-line">
-      On the SMA buy signal, put
-      <select class="inline-select" id="select-sma-dip-init">
-        <option value="25">25%</option>
-        <option value="50">50%</option>
-        <option value="75">75%</option>
-        <option value="100" selected>100%</option>
+      When out of the market, hold
+      <select class="inline-select" id="select-sma-out-asset">
+        <option value="cash" selected>cash</option>
+        <option value="qqq">QQQ</option>
+        <option value="spy">SPY</option>
       </select>
-      of your portfolio in TQQQ right away (the rest stays as cash).
+      instead.
+      <span class="info-icon" tabindex="0" data-tip="Canonical SMA parks in cash on SELL. Picking QQQ or SPY keeps you in unleveraged equity instead — historically the unleveraged versions outperformed bonds/cash on the SELL side. Cash still earns the cash rate above; stock fallbacks track the chosen asset's price.">ⓘ</span>
+    </div>
+
+    <div class="strategy-panel-section-label" style="margin-top:18px">Stage your buying / selling</div>
+    <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:10px">
+      Default: BUY and SELL signals fire trades instantly. Setting either ladder spreads the move over N months — sell to cash is always instant; only the buy side ramps.
     </div>
     <div class="adaptive-line">
-      Then if TQQQ falls
-      <select class="inline-select" id="select-sma-dip-r1-drop">
+      On a BUY signal, ramp into the underlying over
+      <select class="inline-select" id="select-sma-dca-in">
+        <option value="0" selected>0 (instant)</option>
+        <option value="3">3 months</option>
+        <option value="6">6 months</option>
+        <option value="12">12 months</option>
+      </select>.
+    </div>
+    <div class="adaptive-line">
+      On a SELL signal, ramp into the out-asset over
+      <select class="inline-select" id="select-sma-dca-to-out">
+        <option value="0" selected>0 (instant)</option>
+        <option value="3">3 months</option>
+        <option value="6">6 months</option>
+        <option value="12">12 months</option>
+      </select>.
+      <span class="info-icon" tabindex="0" data-tip="Only matters when the out-asset isn't cash. The strategy sells the underlying immediately, then DCAs the cash into the out-asset over this many months. If the BUY signal fires mid-ramp, the partial out-asset position is liquidated back to fund the underlying buy.">ⓘ</span>
+    </div>
+
+    <div class="strategy-panel-section-label" style="margin-top:18px">Bodyguard (deleverage + GTFO)</div>
+    <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:10px">
+      Override the primary signal when the unleveraged underlying gets too far above its own SMA — defensive dot-com-style insurance. Bodyguard transitions are instant (override the DCA ladders).
+    </div>
+    <div class="adaptive-line">
+      Deleverage to unleveraged when QQQ is
+      <select class="inline-select" id="select-sma-bg-delev">
         <option value="0" selected>off</option>
-        <option value="20">20%</option>
-        <option value="30">30%</option>
-        <option value="40">40%</option>
-        <option value="50">50%</option>
-        <option value="60">60%</option>
+        <option value="20">+20%</option>
+        <option value="25">+25%</option>
+        <option value="30">+30%</option>
+        <option value="35">+35%</option>
+        <option value="40">+40%</option>
       </select>
-      from its high, deploy
-      <select class="inline-select" id="select-sma-dip-r1-add">
-        <option value="0" selected>0%</option>
-        <option value="25">25%</option>
-        <option value="50">50%</option>
-        <option value="75">75%</option>
-        <option value="100">all</option>
-      </select>
-      of the remaining cash.
+      above its SMA.
     </div>
     <div class="adaptive-line">
-      And if it falls
-      <select class="inline-select" id="select-sma-dip-r2-drop">
+      Sell everything to cash when QQQ is
+      <select class="inline-select" id="select-sma-bg-gtfo">
         <option value="0" selected>off</option>
-        <option value="40">40%</option>
-        <option value="60">60%</option>
-        <option value="80">80%</option>
-        <option value="90">90%</option>
+        <option value="30">+30%</option>
+        <option value="35">+35%</option>
+        <option value="40">+40%</option>
+        <option value="45">+45%</option>
+        <option value="50">+50%</option>
       </select>
-      from that high, deploy
-      <select class="inline-select" id="select-sma-dip-r2-add">
-        <option value="0" selected>0%</option>
-        <option value="25">25%</option>
-        <option value="50">50%</option>
-        <option value="75">75%</option>
-        <option value="100">all</option>
-      </select>
-      of what's still left.
+      above its SMA.
     </div>
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px;line-height:1.5">
-      "Since we bought" = the TQQQ peak we've seen during this in-the-market period. If the SMA flips to "sell" and later back to "buy", we start over with a fresh initial deploy and a fresh peak.
-    </div>
+
   </div>
 </div>
 
@@ -761,16 +767,16 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=13"></script>
-<script src="js/utils.js?v=13"></script>
-<script src="js/simulate.js?v=13"></script>
-<script src="js/metrics.js?v=13"></script>
-<script src="js/chart.js?v=13"></script>
-<script src="js/controls.js?v=13"></script>
-<script src="js/analytics.js?v=13"></script>
-<script src="js/preview-dropdown.js?v=13"></script>
-<script src="js/saved-configs.js?v=13"></script>
-<script src="js/init.js?v=13"></script>
+<script src="js/data.js?v=15"></script>
+<script src="js/utils.js?v=15"></script>
+<script src="js/simulate.js?v=15"></script>
+<script src="js/metrics.js?v=15"></script>
+<script src="js/chart.js?v=15"></script>
+<script src="js/controls.js?v=15"></script>
+<script src="js/analytics.js?v=15"></script>
+<script src="js/preview-dropdown.js?v=15"></script>
+<script src="js/saved-configs.js?v=15"></script>
+<script src="js/init.js?v=15"></script>
 
 </body>
 </html>

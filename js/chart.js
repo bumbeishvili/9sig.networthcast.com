@@ -165,27 +165,22 @@ function buildNineSigRulesHtml() {
 }
 
 // Event-driven log table for the SMA strategy. Shows one row per actual
-// trade (ENTER / EXIT / RUNG 1 / RUNG 2) — not one row per quarter — because
-// SMA only does something when a signal fires. Most quarters would just be
-// noise. Drawdown column is non-zero only when relevant (RUNG fires / EXIT).
+// trade (ENTER / EXIT) — not one row per quarter — because SMA only does
+// something when the signal flips. Most quarters would just be noise.
 function buildSmaLogTableHtml(smaLog) {
   if (!smaLog || smaLog.length === 0) return '';
   // The leveraged ETF the SMA strategy holds when "in" (TQQQ / QQQ5).
   const ulName = ((document.getElementById('select-sma-underlying') || {}).value || 'tqqq').toUpperCase();
   const rows = smaLog.map(l => {
-    const ac = l.action === 'EXIT'   ? 'action-sell'
-             : l.action === 'ENTER'  ? 'action-buy'
-             : l.action.startsWith('RUNG') ? 'action-buy'
+    const ac = l.action === 'EXIT'  ? 'action-sell'
+             : l.action === 'ENTER' ? 'action-buy'
              : 'action-hold';
-    const dd = l.drawdownPct > 0 ? `−${l.drawdownPct.toFixed(0)}%` : '—';
     return `<tr>
       <td>${fmtLogDate(l.date)}</td>
       <td class="${ac}">${l.action}</td>
       <td>${l.state.toUpperCase()}</td>
       <td>${fmtLogPrice(l.price)}</td>
       <td>${fmtLogShares(l.shares)}</td>
-      <td>${l.deployPct ? l.deployPct + '%' : '—'}</td>
-      <td>${dd}</td>
       <td>${fmtFull(Math.round(l.stockVal))}</td>
       <td>${fmtFull(Math.round(l.cash))}</td>
       <td>${fmtFull(Math.round(l.total))}</td>
@@ -206,8 +201,6 @@ function buildSmaLogTableHtml(smaLog) {
             <th>State</th>
             <th>${ulName} Price</th>
             <th>${ulName} Shares</th>
-            <th>Deploy</th>
-            <th>DD from peak</th>
             <th>Stock Val</th>
             <th>Cash</th>
             <th>Total</th>
@@ -961,11 +954,11 @@ function render() {
     exitBufferPct:        +((document.getElementById('select-sma-exit-buf')  || {}).value) || 0,
     rsiOverheatThreshold: +((document.getElementById('select-sma-rsi-oh')   || {}).value) || 0,
     rsiCoolThreshold:     +((document.getElementById('select-sma-rsi-cool') || {}).value) || 0,
-    dipInitialPct: +((document.getElementById('select-sma-dip-init')    || {}).value) || 100,
-    dipR1Drop:     +((document.getElementById('select-sma-dip-r1-drop') || {}).value) || 0,
-    dipR1Add:      +((document.getElementById('select-sma-dip-r1-add')  || {}).value) || 0,
-    dipR2Drop:     +((document.getElementById('select-sma-dip-r2-drop') || {}).value) || 0,
-    dipR2Add:      +((document.getElementById('select-sma-dip-r2-add')  || {}).value) || 0,
+    outAsset:       ((document.getElementById('select-sma-out-asset') || {}).value) || 'cash',
+    dcaInMonths:    +((document.getElementById('select-sma-dca-in')      || {}).value) || 0,
+    dcaToOutMonths: +((document.getElementById('select-sma-dca-to-out')  || {}).value) || 0,
+    bgDelevPct:     +((document.getElementById('select-sma-bg-delev')    || {}).value) || 0,
+    bgGtfoPct:      +((document.getElementById('select-sma-bg-gtfo')     || {}).value) || 0,
   };
   const { smaPoints, smaLog } = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise, smaOpts);
 

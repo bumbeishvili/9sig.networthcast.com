@@ -63,11 +63,11 @@
   if (params.get('sro') !== null) { document.getElementById('select-sma-rsi-oh').value      = params.get('sro'); hasUrlParams = true; }
   if (params.get('src') !== null) { document.getElementById('select-sma-rsi-cool').value    = params.get('src'); hasUrlParams = true; }
   if (params.get('scr') !== null) { document.getElementById('select-sma-cashrate').value    = params.get('scr'); hasUrlParams = true; }
-  if (params.get('sdi') !== null) { document.getElementById('select-sma-dip-init').value    = params.get('sdi'); hasUrlParams = true; }
-  if (params.get('sd1') !== null) { document.getElementById('select-sma-dip-r1-drop').value = params.get('sd1'); hasUrlParams = true; }
-  if (params.get('sa1') !== null) { document.getElementById('select-sma-dip-r1-add').value  = params.get('sa1'); hasUrlParams = true; }
-  if (params.get('sd2') !== null) { document.getElementById('select-sma-dip-r2-drop').value = params.get('sd2'); hasUrlParams = true; }
-  if (params.get('sa2') !== null) { document.getElementById('select-sma-dip-r2-add').value  = params.get('sa2'); hasUrlParams = true; }
+  if (params.get('soa') !== null) { document.getElementById('select-sma-out-asset').value   = params.get('soa'); hasUrlParams = true; }
+  if (params.get('sdi') !== null) { document.getElementById('select-sma-dca-in').value      = params.get('sdi'); hasUrlParams = true; }
+  if (params.get('sdo') !== null) { document.getElementById('select-sma-dca-to-out').value  = params.get('sdo'); hasUrlParams = true; }
+  if (params.get('sbd') !== null) { document.getElementById('select-sma-bg-delev').value    = params.get('sbd'); hasUrlParams = true; }
+  if (params.get('sbg') !== null) { document.getElementById('select-sma-bg-gtfo').value     = params.get('sbg'); hasUrlParams = true; }
   // 9sig underlying + signal-line growth
   if (params.get('nu') !== null) { document.getElementById('select-9sig-underlying').value = params.get('nu'); hasUrlParams = true; }
   if (params.get('ng') !== null) { document.getElementById('select-9sig-growth').value     = params.get('ng'); hasUrlParams = true; }

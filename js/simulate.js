@@ -11,6 +11,15 @@
 //
 // `state` per quarter is 'in' (holding TQQQ) or 'out' (cash) at the end of
 // that quarter — the SMA strategy panel renders transition dots off this.
+// Column index into monthlyData rows for each tradeable asset name.
+// monthlyData layout: [date, tqqq, qqq, spy, _unused, qqq5]
+const SMA_ASSET_COL = { tqqq: 1, qqq: 2, spy: 3, qqq5: 5 };
+// Unleveraged equivalent — used for the bodyguard SMA-distance check.
+// (The bodyguard tracks the unleveraged underlying because the leveraged
+// version's "% above its own SMA" is structurally larger and useless as a
+// gauge of how stretched the underlying market is.)
+const SMA_UNLEVERAGED_OF = { tqqq: 'qqq', qqq5: 'qqq', qqq: 'qqq', spy: 'spy' };
+
 function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, opts) {
   opts = opts || {};
   const smaAsset  = (opts.smaAsset || 'qqq').toLowerCase();
@@ -29,15 +38,22 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   // RSI(10) is below this value. Filters out buying tops by waiting for a
   // pullback within the uptrend. 0 = off (enter immediately on SMA cross).
   const rsiCool   = +opts.rsiCoolThreshold || 0;
-  // Dip-buy ladder: when SMA signal is "in", the % of total portfolio
-  // deployed to the underlying depends on drawdown from the underlying's
-  // running peak since entry. Default: 100% deploy, no rungs → behaves
-  // exactly like the original binary-state SMA.
-  const dipInitialPct = opts.dipInitialPct != null ? +opts.dipInitialPct : 100;
-  const dipR1Drop = +opts.dipR1Drop || 0;  // % drawdown trigger (0 = off)
-  const dipR1Add  = +opts.dipR1Add  || 0;  // % to add to deployment when triggered
-  const dipR2Drop = +opts.dipR2Drop || 0;
-  const dipR2Add  = +opts.dipR2Add  || 0;
+  // What to hold during a SELL ("out") state: cash (canonical) or an
+  // unleveraged equity asset (QQQ / SPY). When an asset is picked, monthly
+  // contributions during "out" DCA into it instead of sitting idle in cash.
+  const outAsset  = (opts.outAsset || 'cash').toLowerCase();
+  // DCA ladders (time-based, in months). 0 = instant (current behavior).
+  // dcaInMonths gates the cash → underlying ramp on BUY; dcaToOutMonths gates
+  // the cash → out-asset ramp on SELL (only meaningful when outAsset != cash).
+  // Sells to cash are always instant — only the buy leg of any transition is
+  // laddered, matching the canonical "sell immediately, DCA back in" pattern.
+  const dcaInMonths    = Math.max(0, +opts.dcaInMonths    || 0);
+  const dcaToOutMonths = Math.max(0, +opts.dcaToOutMonths || 0);
+  // Bodyguard thresholds (% above unleveraged-underlying SMA). 0 = off.
+  // delev: leveraged → unleveraged swap. gtfo: everything → cash. Bodyguard
+  // transitions are instant (override DCA) — the whole point is emergency exit.
+  const bgDelev = +opts.bgDelevPct || 0;
+  const bgGtfo  = +opts.bgGtfoPct  || 0;
   const monthlyRate = annualRate / 12;
   annualRaise = annualRaise || 0;
 
@@ -51,6 +67,16 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   const startDate = quarterlyData[entryIdx][0];
   const endDate   = quarterlyData[exitIdx][0];
   const assetCol  = smaAsset === 'qqq' ? 2 : 3; // monthlyData = [date, tqqq, qqq, spy, _, qqq5]
+
+  // Underlying asset name (for state-machine target comparisons). Resolve from
+  // ulCol so non-default underlyings (QQQ5) get the right unleveraged sibling.
+  const ulName = Object.keys(SMA_ASSET_COL).find(k => SMA_ASSET_COL[k] === ulCol) || 'tqqq';
+  const unlevName = SMA_UNLEVERAGED_OF[ulName] || 'qqq';
+  const unlevCol  = SMA_ASSET_COL[unlevName];
+  // Bodyguard SMA — same window as primary, but always on the unleveraged
+  // underlying ("% above QQQ-200" is the canonical dot-com gauge, not the
+  // leveraged version of it).
+  const bgSmaAtMon = (bgDelev > 0 || bgGtfo > 0) ? smaAtMonthlyByKey[unlevName + '_' + smaWindow] : null;
 
   // First monthly index at-or-after the entry quarter; last at-or-before exit.
   let mStart = 0;
@@ -77,28 +103,24 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     if (rsiCool > 0 && rsi != null && rsi >= rsiCool) return 'out'; // wait for pullback
     return asset > sma * (1 + entryBuf) ? 'in' : 'out';
   }
-  // Helper: target deployment % given current state and drawdown from peak.
-  // When 'out' the target is always 0; when 'in', start at dipInitialPct and
-  // step up via rungs. dipR1Add / dipR2Add are now "% of REMAINING cash to
-  // deploy" (0..100), not absolute deltas, so the target can never exceed
-  // 100% no matter what the user picks. Math:
-  //   after rung_i: target = prev + (100 - prev) × (rung_i / 100)
-  // Rungs latch — once fired in an in-cycle, they stay deployed until the
-  // next out→in transition resets the ladder.
-  function targetDeployPct(state, drawdownPct, r1Fired, r2Fired) {
-    if (state === 'out') return 0;
-    let pct = dipInitialPct;
-    if (r1Fired || (dipR1Drop > 0 && drawdownPct >= dipR1Drop)) {
-      pct = pct + (100 - pct) * (dipR1Add / 100);
-    }
-    if (r2Fired || (dipR2Drop > 0 && drawdownPct >= dipR2Drop)) {
-      pct = pct + (100 - pct) * (dipR2Add / 100);
-    }
-    if (pct > 100) pct = 100;
-    if (pct < 0)   pct = 0;
-    return pct;
+  // Bodyguard: returns 'gtfo' / 'delev' / 'normal' based on the unleveraged
+  // underlying's % above its own SMA. Both thresholds must be > 0 to fire.
+  function evalBodyguard(unlevPrice, unlevSma) {
+    if (!unlevSma || unlevSma <= 0 || unlevPrice <= 0) return 'normal';
+    const aboveBy = (unlevPrice / unlevSma - 1) * 100;
+    if (bgGtfo  > 0 && aboveBy >= bgGtfo)  return 'gtfo';
+    if (bgDelev > 0 && aboveBy >= bgDelev) return 'delev';
+    return 'normal';
   }
-
+  // Compose primary + bodyguard into a single target asset name. Bodyguard
+  // wins (gtfo → cash, delev → unleveraged); else primary decides between the
+  // underlying and the out-asset.
+  function computeTarget(primary, bg) {
+    if (bg === 'gtfo') return 'cash';
+    if (primary === 'out') return outAsset;
+    if (bg === 'delev') return unlevName;
+    return ulName;
+  }
   // Initial state: SMA + buffer + RSI on entry month.
   const sm0 = monthlyData[mStart];
   const a0  = sm0[assetCol] || 0;
@@ -108,64 +130,77 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   // back to plain "above SMA?" for the very first read).
   let state  = sma0 == null ? 'in' : (a0 > sma0 ? 'in' : 'out');
   if (state === 'in' && rsiOH > 0 && rsi0 != null && rsi0 >= rsiOH) state = 'out';
+  // Initial bodyguard read (same month).
+  const bgSma0 = bgSmaAtMon ? bgSmaAtMon[mStart] : null;
+  const unlev0 = sm0[unlevCol] || 0;
+  let bgState = evalBodyguard(unlev0, bgSma0);
 
-  const ul0 = sm0[ulCol] || 0;
-  // Initial deployment uses dipInitialPct so a "50% initial" ladder starts
-  // with only 50% of the lump-sum in the underlying even before any drawdown.
-  const initialDeploy = state === 'in' && ul0 > 0 ? initial * (dipInitialPct / 100) : 0;
-  let shares = ul0 > 0 ? initialDeploy / ul0 : 0;
-  let cash   = initial - initialDeploy;
+  // Holdings: shares per tradeable asset (tqqq, qqq, spy, qqq5) + cash.
+  // Multiple buckets coexist mid-DCA; non-target buckets are sold instantly
+  // each month, target bucket is bought via the active DCA ladder.
+  const shares = { tqqq: 0, qqq: 0, spy: 0, qqq5: 0 };
+  let cash = initial;
   let totalInvested = initial;
   const startYear = parseInt(sm0[0].substring(0, 4));
   let currentMonthly = monthly;
   let lastYear = startYear;
 
-  // Track running peak of the underlying since last out→in (or from entry
-  // if we started "in"). Used to compute drawdown for ladder rungs.
-  let peakUl = ul0 > 0 ? ul0 : 0;
-  let r1Fired = false, r2Fired = false;
+  // Pricing helper — column-zero (no data) returns 0 so callers skip the trade.
+  function priceOf(row, asset) {
+    const c = SMA_ASSET_COL[asset];
+    return (c != null) ? (row[c] || 0) : 0;
+  }
+  // Initial target asset + initial deployment (instant — there's nothing prior
+  // to ramp from).
+  let target = computeTarget(state, bgState);
+  if (target !== 'cash') {
+    const p0 = priceOf(sm0, target);
+    if (p0 > 0) { shares[target] = cash / p0; cash = 0; }
+  }
+  let dcaRemaining = 0; // 0 = no active DCA (target already reached or all-cash)
 
-  const smaPoints = [{ date: sm0[0], value: shares * ul0 + cash, state }];
+  const ul0 = sm0[ulCol] || 0;
+  function totalAt(row) {
+    let v = 0;
+    for (const a of Object.keys(shares)) {
+      if (shares[a] > 0) v += shares[a] * (priceOf(row, a) || 0);
+    }
+    return v + cash;
+  }
+  const smaPoints = [{ date: sm0[0], value: totalAt(sm0), state }];
   // Event-driven transaction log: one row per ACTUAL trade (ENTER / EXIT /
-  // RUNG fire), not one row per quarter. Most quarters do nothing — listing
-  // them would just be visual noise.
+  // DELEV / GTFO / RESUME), not one row per quarter.
   const smaLog = [{
     date: sm0[0],
     state, action: 'START',
-    price: ul0, shares,
-    stockVal: shares * ul0, cash, total: shares * ul0 + cash,
-    invested: initial, drawdownPct: 0, deployPct: state === 'in' ? dipInitialPct : 0,
+    price: ul0, shares: shares.tqqq + shares.qqq5,  // leveraged-side share count
+    stockVal: totalAt(sm0) - cash, cash, total: totalAt(sm0),
+    invested: initial,
   }];
-  // Helper called at the moment an event happens, AFTER rebalancing reflects
-  // the new state. Snapshots the current bucket values for the log row.
-  function recordEvent(date, action, ulP_) {
-    smaLog.push({
-      date,
-      state,
-      action,
-      price: ulP_ || 0,
-      shares,
-      stockVal: shares * (ulP_ || 0),
-      cash,
-      total: shares * (ulP_ || 0) + cash,
-      invested: totalInvested,
-      drawdownPct: 0, // filled in by caller if relevant
-      deployPct: 0,   // filled in by caller
-    });
-  }
   const qEnds = new Set();
   for (let qi = entryIdx; qi <= exitIdx; qi++) qEnds.add(quarterlyData[qi][0]);
 
-  // Same lazy-seed handling as before: if the underlying column is 0 at
-  // entry, defer deployment until prices become available.
-  let seeded = (ul0 > 0);
+  // Lazy-seed: if a target asset has no price yet (pre-history), defer until
+  // a real price appears. Cash accumulates contributions in the meantime.
+  let seeded = (target === 'cash') ? true : (ul0 > 0 && (priceOf(sm0, target) > 0));
+
+  function actionFor(prevTarget, newTarget, primary, bg, prevBg) {
+    if (prevTarget === newTarget) return null;
+    if (bg === 'gtfo' && prevBg !== 'gtfo') return 'BG-GTFO';
+    if (bg === 'delev' && prevBg !== 'delev') return 'BG-DELEV';
+    if (prevBg === 'gtfo' || prevBg === 'delev') return 'BG-CLEAR';
+    return primary === 'in' ? 'ENTER' : 'EXIT';
+  }
 
   for (let m = mStart + 1; m <= mEnd; m++) {
-    const mDate  = monthlyData[m][0];
-    const ulP    = monthlyData[m][ulCol] || 0;
-    const assetP = monthlyData[m][assetCol] || 0;
+    const row    = monthlyData[m];
+    const mDate  = row[0];
+    const ulP    = row[ulCol] || 0;
+    const assetP = row[assetCol] || 0;
+    const unlevP = row[unlevCol] || 0;
     const sma    = smaAtMon[m];
     const rsi    = rsiAtMon ? rsiAtMon[m] : null;
+    const bgSma  = bgSmaAtMon ? bgSmaAtMon[m] : null;
 
     const yr = parseInt(mDate.substring(0, 4));
     if (yr > lastYear) {
@@ -179,75 +214,60 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     totalInvested += currentMonthly;
     cash += currentMonthly;
 
-    // Late-seed for missing-history underlyings.
-    if (!seeded && ulP > 0) seeded = true;
-
-    // Update peak and re-evaluate signal.
-    if (state === 'in' && ulP > peakUl) peakUl = ulP;
     const prevState = state;
-    state = evalSignal(state, assetP, sma, rsi);
-    const flipped = state !== prevState;
-    if (flipped && state === 'in') {
-      peakUl = ulP > 0 ? ulP : peakUl;
-      r1Fired = false; r2Fired = false;
+    const prevBg    = bgState;
+    state   = evalSignal(state, assetP, sma, rsi);
+    bgState = evalBodyguard(unlevP, bgSma);
+    const prevTarget = target;
+    target  = computeTarget(state, bgState);
+
+    if (!seeded) {
+      seeded = (target === 'cash') || (priceOf(row, target) > 0);
     }
 
-    // Rung triggers (only meaningful while in).
-    let drawdownPct = 0;
-    if (state === 'in' && peakUl > 0 && ulP > 0 && ulP < peakUl) {
-      drawdownPct = (1 - ulP / peakUl) * 100;
+    // Target changed → instant-sell all non-target stocks → cash. Then arm
+    // the DCA ladder for the new direction (instant for sells/bodyguard).
+    if (target !== prevTarget) {
+      for (const a of Object.keys(shares)) {
+        if (a !== target && shares[a] > 0) {
+          const p = priceOf(row, a);
+          if (p > 0) { cash += shares[a] * p; shares[a] = 0; }
+        }
+      }
+      // Bodyguard transitions are always instant; otherwise the ladder
+      // applicable to the new direction.
+      const bgChange = (bgState !== 'normal') || (prevBg !== 'normal');
+      if (target === 'cash' || bgChange) dcaRemaining = 0;
+      else if (target === ulName)        dcaRemaining = dcaInMonths    || 0;
+      else                                dcaRemaining = dcaToOutMonths || 0;
     }
-    const r1Before = r1Fired, r2Before = r2Fired;
-    if (state === 'in' && dipR1Drop > 0 && drawdownPct >= dipR1Drop) r1Fired = true;
-    if (state === 'in' && dipR2Drop > 0 && drawdownPct >= dipR2Drop) r2Fired = true;
-    const r1Newly = !r1Before && r1Fired;
-    const r2Newly = !r2Before && r2Fired;
 
-    const targetPct = targetDeployPct(state, drawdownPct, r1Fired, r2Fired);
-
-    // Rebalance to target deploy %. We compute target stock VALUE, not target
-    // shares — so contributions added to cash this month flow into the
-    // underlying via the rebalance if the target says so.
-    if (seeded && ulP > 0) {
-      const total = shares * ulP + cash;
-      const targetStockVal = total * targetPct / 100;
-      const delta = targetStockVal - shares * ulP;
-      if (delta > 0) {
-        const buyAmt = Math.min(delta, cash);
-        shares += buyAmt / ulP;
-        cash   -= buyAmt;
-      } else if (delta < 0) {
-        const sellAmt = Math.min(-delta, shares * ulP);
-        shares -= sellAmt / ulP;
-        cash   += sellAmt;
+    // Deploy from cash → target stock (if any). 0 = instant; N = ramp 1/N of
+    // remaining cash each month for N months.
+    if (seeded && target !== 'cash' && cash > 0) {
+      const p = priceOf(row, target);
+      if (p > 0) {
+        const fraction = dcaRemaining > 1 ? 1 / dcaRemaining : 1;
+        const buy = cash * fraction;
+        shares[target] += buy / p;
+        cash -= buy;
+        if (dcaRemaining > 0) dcaRemaining--;
       }
     }
 
-    // Event log: emit one row per actual signal — EXIT, ENTER, RUNG 1, RUNG 2.
-    // No row for "nothing happened". Multiple events in the same month can
-    // both fire (e.g. ENTER + immediate RUNG) — log each in priority order.
-    if (flipped && state === 'out') {
-      smaLog.push({ date: mDate, state, action: 'EXIT', price: ulP, shares,
-                    stockVal: shares * ulP, cash, total: shares * ulP + cash,
-                    invested: totalInvested, drawdownPct, deployPct: 0 });
-    } else if (flipped && state === 'in') {
-      smaLog.push({ date: mDate, state, action: 'ENTER', price: ulP, shares,
-                    stockVal: shares * ulP, cash, total: shares * ulP + cash,
-                    invested: totalInvested, drawdownPct: 0, deployPct: targetPct });
-    }
-    if (r1Newly) {
-      smaLog.push({ date: mDate, state, action: 'RUNG 1', price: ulP, shares,
-                    stockVal: shares * ulP, cash, total: shares * ulP + cash,
-                    invested: totalInvested, drawdownPct, deployPct: targetPct });
-    }
-    if (r2Newly) {
-      smaLog.push({ date: mDate, state, action: 'RUNG 2', price: ulP, shares,
-                    stockVal: shares * ulP, cash, total: shares * ulP + cash,
-                    invested: totalInvested, drawdownPct, deployPct: targetPct });
+    const flippedAction = actionFor(prevTarget, target, state, bgState, prevBg);
+    if (flippedAction) {
+      smaLog.push({
+        date: mDate, state, action: flippedAction,
+        price: ulP, shares: shares.tqqq + shares.qqq5,
+        stockVal: totalAt(row) - cash,
+        cash, total: totalAt(row),
+        invested: totalInvested,
+      });
     }
 
     if (qEnds.has(mDate)) {
-      smaPoints.push({ date: mDate, value: shares * ulP + cash, state });
+      smaPoints.push({ date: mDate, value: totalAt(row), state });
     }
   }
 

@@ -1,6 +1,6 @@
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-cool','select-sma-dip-init','select-sma-dip-r1-drop','select-sma-dip-r1-add','select-sma-dip-r2-drop','select-sma-dip-r2-add'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-cool','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-delev','select-sma-bg-gtfo'];
 const LS_KEY = '9sig-sliders';
 // Bump APP_VERSION whenever a backwards-incompatible change ships (a control
 // id is renamed, a default flips, a strategy is dropped). On mismatch we
@@ -8,7 +8,7 @@ const LS_KEY = '9sig-sliders';
 // nuking storage silently; the user clicks it when they're ready to load
 // the new defaults. If they've never visited before (no stored version),
 // we just record the current one without prompting.
-const APP_VERSION = 13; // bumped when the unsaved-changes warning on strategy-panel close shipped
+const APP_VERSION = 15; // bumped when SMA gained out-asset, DCA-in/out ladders, and bodyguard rules
 // NOTE: when you change any js/*.js or styles.css, also bump the matching ?v=
 // cache-bust query on the <script>/<link> tags in index.html (keep it equal to
 // APP_VERSION) so returning browsers fetch the new files instead of stale cache.
@@ -145,7 +145,7 @@ function saveSliders() {
     render();
   });
 });
-['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-cool','select-sma-dip-init','select-sma-dip-r1-drop','select-sma-dip-r1-add','select-sma-dip-r2-drop','select-sma-dip-r2-add'].forEach(id => {
+['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-cool','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-delev','select-sma-bg-gtfo'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => {
     saveSliders();
@@ -501,11 +501,11 @@ function shareConfig() {
   if (get('select-sma-rsi-oh'))      params.set('sro', get('select-sma-rsi-oh').value);
   if (get('select-sma-rsi-cool'))    params.set('src', get('select-sma-rsi-cool').value);
   if (get('select-sma-cashrate'))    params.set('scr', get('select-sma-cashrate').value);
-  if (get('select-sma-dip-init'))    params.set('sdi', get('select-sma-dip-init').value);
-  if (get('select-sma-dip-r1-drop')) params.set('sd1', get('select-sma-dip-r1-drop').value);
-  if (get('select-sma-dip-r1-add'))  params.set('sa1', get('select-sma-dip-r1-add').value);
-  if (get('select-sma-dip-r2-drop')) params.set('sd2', get('select-sma-dip-r2-drop').value);
-  if (get('select-sma-dip-r2-add'))  params.set('sa2', get('select-sma-dip-r2-add').value);
+  if (get('select-sma-out-asset'))   params.set('soa', get('select-sma-out-asset').value);
+  if (get('select-sma-dca-in'))      params.set('sdi', get('select-sma-dca-in').value);
+  if (get('select-sma-dca-to-out'))  params.set('sdo', get('select-sma-dca-to-out').value);
+  if (get('select-sma-bg-delev'))    params.set('sbd', get('select-sma-bg-delev').value);
+  if (get('select-sma-bg-gtfo'))     params.set('sbg', get('select-sma-bg-gtfo').value);
 
   // 9sig: underlying + signal-line growth + rule customization
   if (get('select-9sig-underlying')) params.set('nu', get('select-9sig-underlying').value);

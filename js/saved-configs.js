@@ -22,9 +22,9 @@ const CONFIG_PARAM_IDS = {
            'select-9sig-deploy', 'select-9sig-target-compound'],
   'sma':  ['select-sma-asset', 'select-sma-window', 'select-sma-underlying',
            'select-sma-cashrate', 'select-sma-entry-buf', 'select-sma-exit-buf',
-           'select-sma-rsi-oh', 'select-sma-rsi-cool', 'select-sma-dip-init',
-           'select-sma-dip-r1-drop', 'select-sma-dip-r1-add',
-           'select-sma-dip-r2-drop', 'select-sma-dip-r2-add'],
+           'select-sma-rsi-oh', 'select-sma-rsi-cool',
+           'select-sma-out-asset', 'select-sma-dca-in', 'select-sma-dca-to-out',
+           'select-sma-bg-delev', 'select-sma-bg-gtfo'],
   'bh':   ['select-bh-underlying'],
   'invested': ['slider-rate'],
 };
@@ -799,11 +799,11 @@ function computeConfigSeries(cfg, ctx) {
       exitBufferPct: +pget(p, 'select-sma-exit-buf', 0) || 0,
       rsiOverheatThreshold: +pget(p, 'select-sma-rsi-oh', 0) || 0,
       rsiCoolThreshold: +pget(p, 'select-sma-rsi-cool', 0) || 0,
-      dipInitialPct: +pget(p, 'select-sma-dip-init', 100) || 100,
-      dipR1Drop: +pget(p, 'select-sma-dip-r1-drop', 0) || 0,
-      dipR1Add: +pget(p, 'select-sma-dip-r1-add', 0) || 0,
-      dipR2Drop: +pget(p, 'select-sma-dip-r2-drop', 0) || 0,
-      dipR2Add: +pget(p, 'select-sma-dip-r2-add', 0) || 0,
+      outAsset: pget(p, 'select-sma-out-asset', 'cash') || 'cash',
+      dcaInMonths: +pget(p, 'select-sma-dca-in', 0) || 0,
+      dcaToOutMonths: +pget(p, 'select-sma-dca-to-out', 0) || 0,
+      bgDelevPct: +pget(p, 'select-sma-bg-delev', 0) || 0,
+      bgGtfoPct: +pget(p, 'select-sma-bg-gtfo', 0) || 0,
     };
     const cashRate = (+pget(p, 'select-sma-cashrate', 4) || 0) / 100;
     const r = simulateSMA(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, opts);
