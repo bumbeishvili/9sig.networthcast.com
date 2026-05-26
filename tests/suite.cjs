@@ -446,7 +446,7 @@ async function run() {
   section('share-link strategies: not auto-saved, banner "Save" persists them');
   await fresh(page);
   const sc = [{ type: '9sig', name: 'Shared 9sig', params: { 'select-9sig-growth': '12' }, color: '#e879f9' }];
-  await page.goto(BASE + '/index.html?v=12&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/index.html?v=13&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#chart-legend .legend-chip', { timeout: 15000 });
   await page.waitForTimeout(400);
   const afterLoad = await page.evaluate(() => ({
@@ -479,7 +479,7 @@ async function run() {
 
   // And the "discard" path: a fresh load with ?sc= but the user doesn't click Save → reload without ?sc → strategy gone.
   await fresh(page);
-  await page.goto(BASE + '/index.html?v=12&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/index.html?v=13&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#chart-legend .legend-chip', { timeout: 15000 });
   await page.waitForTimeout(400);
   await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded' });
@@ -487,6 +487,64 @@ async function run() {
   await page.waitForTimeout(300);
   const afterDiscard = await page.evaluate(() => getSavedConfigs().length);
   ck('without clicking Save, reload without ?sc= drops the shared strategy', afterDiscard === 0, 'count=' + afterDiscard);
+
+  // ===== unsaved-changes warning when closing a dirty base panel =====
+  section('unsaved-changes warning on close');
+  await fresh(page);
+  await openMain(page);
+  // Clean close: no edits → close goes through immediately, no dialog.
+  await page.click('.strategy-panel-close'); await page.waitForTimeout(150);
+  ck('clean base close: no dialog, panel closes', await page.evaluate(() =>
+    !document.getElementById('sc-unsaved-modal') && !document.querySelector('#strategy-panel.is-open')));
+  // Dirty close: edit a knob, click × → dialog appears, panel stays open.
+  await openMain(page);
+  await setSel(page, 'select-9sig-growth', '20');
+  await page.click('.strategy-panel-close'); await page.waitForTimeout(200);
+  ck('dirty base close: dialog appears, panel stays open', await page.evaluate(() =>
+    !!document.getElementById('sc-unsaved-modal') && !!document.querySelector('#strategy-panel.is-open')));
+  // Esc dismisses the dialog (no Cancel button) → panel still open, edit preserved.
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  ck('Esc dismisses dialog: panel open, edit kept', await page.evaluate(() =>
+    !document.getElementById('sc-unsaved-modal')
+    && !!document.querySelector('#strategy-panel.is-open')
+    && document.getElementById('select-9sig-growth').value === '20'));
+  // Discard: dialog gone, panel closed, no new saved strategy, control reset.
+  await page.click('.strategy-panel-close'); await page.waitForTimeout(150);
+  await page.click('[data-sc-unsaved-discard]'); await page.waitForTimeout(200);
+  ck('discard: panel closed, control reset, no saved strategy created',
+    (await page.evaluate(() => ({
+      modal: !!document.getElementById('sc-unsaved-modal'),
+      open: !!document.querySelector('#strategy-panel.is-open'),
+      growth: document.getElementById('select-9sig-growth').value,
+      n: getSavedConfigs().length,
+    }))).modal === false && (await page.evaluate(() => !document.querySelector('#strategy-panel.is-open') && document.getElementById('select-9sig-growth').value === '9' && getSavedConfigs().length === 0)));
+  // Save: dialog click "Save as strategy" → persists the edit, closes panel.
+  await openMain(page);
+  await setSel(page, 'select-9sig-growth', '15');
+  await page.click('.strategy-panel-close'); await page.waitForTimeout(150);
+  await page.click('[data-sc-unsaved-save]'); await page.waitForTimeout(300);
+  ck('save: panel closed, saved strategy persists with the edit',
+    await page.evaluate(() =>
+      !document.querySelector('#strategy-panel.is-open')
+      && getSavedConfigs().length === 1
+      && getSavedConfigs()[0].params['select-9sig-growth'] === '15'));
+  // Editing a saved strategy auto-saves live → no warning on close.
+  await page.click('.saved-config-pill .sc-edit'); await page.waitForTimeout(200);
+  await setSel(page, 'select-9sig-growth', '25');
+  await page.click('.strategy-panel-close'); await page.waitForTimeout(150);
+  ck('saved-strategy close: no dialog (auto-saves live)', await page.evaluate(() =>
+    !document.getElementById('sc-unsaved-modal') && !document.querySelector('#strategy-panel.is-open')));
+  // Esc on dirty base panel also triggers the dialog.
+  await fresh(page);
+  await openMain(page);
+  await setSel(page, 'select-9sig-growth', '12');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  ck('Esc on dirty base panel: dialog appears', await page.evaluate(() =>
+    !!document.getElementById('sc-unsaved-modal') && !!document.querySelector('#strategy-panel.is-open')));
+  // Esc again closes the dialog (not the panel).
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  ck('Esc on dialog: closes dialog, panel stays open', await page.evaluate(() =>
+    !document.getElementById('sc-unsaved-modal') && !!document.querySelector('#strategy-panel.is-open')));
 
   await browser.close();
 

@@ -1797,11 +1797,40 @@ function closeDeleteDialog() {
   const m = document.getElementById('sc-delete-modal');
   if (m) m.remove();
 }
+
+// --- styled unsaved-changes confirmation (panel close with dirty knobs) -
+function showUnsavedDialog(type, onSave, onDiscard) {
+  closeUnsavedDialog();
+  const label = (typeof genBaseName === 'function') ? genBaseName(type) : type;
+  const overlay = document.createElement('div');
+  overlay.className = 'sc-modal-overlay';
+  overlay.id = 'sc-unsaved-modal';
+  overlay.innerHTML = `
+    <div class="sc-modal" role="dialog" aria-modal="true" aria-labelledby="sc-unsaved-title">
+      <div class="sc-modal-title" id="sc-unsaved-title">Save changes?</div>
+      <div class="sc-modal-body">You’ve edited the <b>${label}</b> strategy. The base strategy doesn’t persist edits — closing will reset it to defaults. Save your changes as a new strategy first?</div>
+      <div class="sc-modal-actions">
+        <button type="button" class="sc-modal-btn" data-sc-unsaved-discard>Close</button>
+        <button type="button" class="sc-modal-btn primary" data-sc-unsaved-save>Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-sc-unsaved-save]').addEventListener('click', () => { closeUnsavedDialog(); if (onSave) onSave(); });
+  overlay.querySelector('[data-sc-unsaved-discard]').addEventListener('click', () => { closeUnsavedDialog(); if (onDiscard) onDiscard(); });
+  const save = overlay.querySelector('[data-sc-unsaved-save]');
+  if (save) save.focus();
+}
+function closeUnsavedDialog() {
+  const m = document.getElementById('sc-unsaved-modal');
+  if (m) m.remove();
+}
+
 // Esc closes the dialog. Capture phase + stopImmediatePropagation so it wins
 // over the strategy-panel's own Esc handler.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (document.getElementById('sc-delete-modal')) { e.stopImmediatePropagation(); closeDeleteDialog(); return; }
+  if (document.getElementById('sc-unsaved-modal')) { e.stopImmediatePropagation(); closeUnsavedDialog(); return; }
   if (document.getElementById('custom-builder-modal')) { e.stopImmediatePropagation(); closeCustomBuilder(true); return; }
 }, true);
 

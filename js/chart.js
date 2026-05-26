@@ -597,6 +597,24 @@ function closeStrategyPanel() {
   panel.setAttribute('aria-hidden', 'true');
   if (openKey && typeof render === 'function') render();
 }
+// Gated close: when a BASE panel has edits that differ from canonical defaults,
+// closing would silently reset them — so warn first. Editing a saved strategy
+// auto-syncs live, so no warning is needed there.
+function attemptCloseStrategyPanel() {
+  const key = getOpenPanelKey();
+  const editingSaved = window._editingConfigId
+    && typeof getSavedConfigs === 'function'
+    && getSavedConfigs().some(c => c.id === window._editingConfigId && c.type === key);
+  const dirty = key && !editingSaved
+    && typeof captureParams === 'function'
+    && typeof captureDefaultParams === 'function'
+    && typeof paramsEqual === 'function'
+    && !paramsEqual(captureParams(key), captureDefaultParams(key), key);
+  if (!dirty) { closeStrategyPanel(); return; }
+  showUnsavedDialog(key,
+    () => { if (typeof saveConfigFromType === 'function') saveConfigFromType(key); closeStrategyPanel(); },
+    () => closeStrategyPanel());
+}
 
 // Stable keys for the openable strategy panels, so a share link can capture
 // which sidebar was open without depending on dataset indices (which shift
@@ -718,7 +736,7 @@ document.addEventListener('click', (e) => {
   // see the chart update behind it without losing the panel each time they
   // click on the chart area. Use the × button or Esc to dismiss.
   if (e.target.closest('.strategy-panel-close')) {
-    closeStrategyPanel();
+    attemptCloseStrategyPanel();
     return;
   }
   // Anywhere else on the chip → toggle dataset visibility.
@@ -785,7 +803,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const panel = document.getElementById('strategy-panel');
-  if (panel && panel.classList.contains('is-open')) closeStrategyPanel();
+  if (panel && panel.classList.contains('is-open')) attemptCloseStrategyPanel();
 });
 
 function render() {
