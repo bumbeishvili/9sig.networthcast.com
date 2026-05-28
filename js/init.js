@@ -45,8 +45,10 @@
   for (const [key, sliderId] of Object.entries(urlMap)) {
     const val = params.get(key);
     if (val !== null) {
-      // URL `r` is always the rate %, regardless of slider-curve format.
-      const sliderVal = (sliderId === 'slider-rate') ? rateToSlider(+val) : val;
+      // URL `r` is the rate %, and `m` is monthly dollars, regardless of slider curve format.
+      const sliderVal = sliderId === 'slider-rate' ? rateToSlider(+val)
+        : sliderId === 'slider-monthly' ? monthlyToSlider(+val)
+        : val;
       document.getElementById(sliderId).value = sliderVal;
       hasUrlParams = true;
     }
@@ -114,8 +116,11 @@
             el.checked = saved[id] === '1' || saved[id] === true;
             return;
           }
-          // localStorage `slider-rate` is the rate %, not the slider position.
-          const v = (id === 'slider-rate') ? rateToSlider(+saved[id]) : saved[id];
+          // localStorage `slider-rate` / `slider-monthly` store semantic values,
+          // not slider positions, so curve changes can remain backward-compatible.
+          const v = id === 'slider-rate' ? rateToSlider(+saved[id])
+            : id === 'slider-monthly' ? monthlyToSlider(+saved[id])
+            : saved[id];
           el.value = v;
         });
         // 'toggle-envelope' deliberately not restored — alternate runs reset

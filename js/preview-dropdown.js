@@ -57,7 +57,7 @@
     if (exitIdx  > maxIdx) exitIdx  = maxIdx;
     return {
       initial:     sliderToInitial(+document.getElementById('slider-initial').value),
-      monthly:     +document.getElementById('slider-monthly').value,
+      monthly:     sliderToMonthly(+document.getElementById('slider-monthly').value),
       annualRaise: +document.getElementById('slider-raise').value / 100,
       simEntryIdx: entryIdx > 0 ? entryIdx - 1 : entryIdx,
       exitIdx,

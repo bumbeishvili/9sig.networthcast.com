@@ -633,7 +633,7 @@ document.addEventListener('change', (e) => {
   if (!Number.isFinite(value)) return;
   switch (key) {
     case 'initial': fireInput('slider-initial', initialToSlider(value)); break;
-    case 'monthly': fireInput('slider-monthly', value); break;
+    case 'monthly': fireInput('slider-monthly', monthlyToSlider(value)); break;
     case 'raise':   fireInput('slider-raise',   value); break;
     case 'rate':    fireInput('slider-rate',    rateToSlider(value)); break;
   }
@@ -703,7 +703,7 @@ document.addEventListener('change', (e) => {
     // Compute total contributed for this horizon (same for every cell in the
     // column → comparing cells by simple CAGR ≡ comparing by final $).
     const initial = sliderToInitial(+document.getElementById('slider-initial').value);
-    const monthly = +document.getElementById('slider-monthly').value || 0;
+    const monthly = sliderToMonthly(+document.getElementById('slider-monthly').value) || 0;
     const raise   = (+document.getElementById('slider-raise').value || 0) / 100;
     let contributed = initial;
     for (let y = 0; y < period; y++) contributed += 12 * monthly * Math.pow(1 + raise, y);
@@ -1514,7 +1514,7 @@ function _cellRange(startYear, period) {
 function _analyticsMoneyInputs() {
   return {
     initial: sliderToInitial(+document.getElementById('slider-initial').value),
-    monthly: +document.getElementById('slider-monthly').value,
+    monthly: sliderToMonthly(+document.getElementById('slider-monthly').value),
     annualRaise: +document.getElementById('slider-raise').value / 100,
     rate: sliderToRate(+document.getElementById('slider-rate').value) / 100,
   };
@@ -1578,7 +1578,7 @@ let _cellSimsKey = null;
 // of previous year's last quarter) through end of (startYear + period - 1).
 function getCellSim(startYear, period) {
   const initial      = sliderToInitial(+document.getElementById('slider-initial').value);
-  const monthly      = +document.getElementById('slider-monthly').value;
+  const monthly      = sliderToMonthly(+document.getElementById('slider-monthly').value);
   const annualRaise  = +document.getElementById('slider-raise').value / 100;
   const rate         = sliderToRate(+document.getElementById('slider-rate').value) / 100;
 
@@ -1614,7 +1614,7 @@ function getCellSim(startYear, period) {
 // quarter, with the user's current sliders. Lazy + cached.
 function getYearStartSim(startYear) {
   const initial      = sliderToInitial(+document.getElementById('slider-initial').value);
-  const monthly      = +document.getElementById('slider-monthly').value;
+  const monthly      = sliderToMonthly(+document.getElementById('slider-monthly').value);
   const annualRaise  = +document.getElementById('slider-raise').value / 100;
   const rate         = sliderToRate(+document.getElementById('slider-rate').value) / 100;
 
@@ -2185,7 +2185,7 @@ async function buildHeatmap() {
 
   // Mirror render()'s parameter pull
   const initial = sliderToInitial(+document.getElementById('slider-initial').value);
-  const monthly = +document.getElementById('slider-monthly').value;
+  const monthly = sliderToMonthly(+document.getElementById('slider-monthly').value);
   const annualRaise = +document.getElementById('slider-raise').value / 100;
   const rate = sliderToRate(+document.getElementById('slider-rate').value) / 100;
   const opts = {};

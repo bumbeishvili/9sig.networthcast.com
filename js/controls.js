@@ -8,7 +8,7 @@ const LS_KEY = '9sig-sliders';
 // nuking storage silently; the user clicks it when they're ready to load
 // the new defaults. If they've never visited before (no stored version),
 // we just record the current one without prompting.
-const APP_VERSION = 22; // bumped when SSO (2x SPY) and SPXL (3x SPY) were added as underlyings
+const APP_VERSION = 33; // bumped when Monthly Contribution switched to a curved slider
 // NOTE: when you change any js/*.js or styles.css, also bump the matching ?v=
 // cache-bust query on the <script>/<link> tags in index.html (keep it equal to
 // APP_VERSION) so returning browsers fetch the new files instead of stale cache.
@@ -109,6 +109,7 @@ function saveSliders() {
     // slider position — keeps storage stable across slider-curve changes and
     // backward-compatible with the old linear slider (which also stored %).
     if (id === 'slider-rate') v = String(sliderToRate(+v));
+    if (id === 'slider-monthly') v = String(sliderToMonthly(+v));
     vals[id] = v;
   });
   // 'toggle-envelope' (alternate runs) is intentionally NOT persisted — it's a
@@ -176,7 +177,7 @@ function update9sigCashSpans() {
 // reads as "the checkbox is broken" — so disable + dim it (and surface a
 // hint) whenever monthly is 0.
 function updateDeployAvailability() {
-  const monthly = +((document.getElementById('slider-monthly') || {}).value) || 0;
+  const monthly = sliderToMonthly(+((document.getElementById('slider-monthly') || {}).value || 0));
   const cb = document.getElementById('select-9sig-deploy');
   if (!cb) return;
   const hasMonthly = monthly > 0;
@@ -481,7 +482,7 @@ function shareConfig() {
 
   // Core sliders (existing keys — keep stable so old links keep working)
   params.set('i', get('slider-initial').value);
-  params.set('m', get('slider-monthly').value);
+  params.set('m', String(sliderToMonthly(+get('slider-monthly').value)));
   params.set('a', get('slider-raise').value);
   // Share the rate as percent (matches old-format share URLs and is stable
   // across slider-curve changes).
@@ -588,5 +589,3 @@ function shareConfig() {
     prompt('Copy this link:', url);
   });
 }
-
-
