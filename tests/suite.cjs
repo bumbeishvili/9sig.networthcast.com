@@ -452,7 +452,7 @@ async function run() {
   section('share-link strategies: not auto-saved, banner "Save" persists them');
   await fresh(page);
   const sc = [{ type: '9sig', name: 'Shared 9sig', params: { 'select-9sig-growth': '12' }, color: '#e879f9' }];
-  await page.goto(BASE + '/index.html?v=32&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/index.html?v=35&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#chart-legend .legend-chip', { timeout: 15000 });
   await page.waitForTimeout(400);
   const afterLoad = await page.evaluate(() => ({
@@ -485,7 +485,7 @@ async function run() {
 
   // And the "discard" path: a fresh load with ?sc= but the user doesn't click Save → reload without ?sc → strategy gone.
   await fresh(page);
-  await page.goto(BASE + '/index.html?v=32&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
+  await page.goto(BASE + '/index.html?v=35&sc=' + encodeURIComponent(JSON.stringify(sc)), { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#chart-legend .legend-chip', { timeout: 15000 });
   await page.waitForTimeout(400);
   await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded' });

@@ -230,7 +230,7 @@ function ensureEnvelopeCacheForPeriod(period) {
 // One trading-quarter is roughly 63 trading days (5 days × 13 weeks, holidays
 // notwithstanding). Used to space the coarse "quarter-offset" envelope lines.
 const ENVELOPE_DAYS_PER_QUARTER = 63;            // legacy default (preserved for chart code that hardcoded it)
-const ENVELOPE_MAX_GHOSTS       = 100;           // density cap — sample evenly if a period would produce more than this
+const ENVELOPE_MAX_GHOSTS       = 60;            // density cap — sample evenly if a period has more trading days than this
 
 // Build the list of trading-day shifts the envelope renders for the given
 // rebalance period. Each shift rolls every period-end check back by N
@@ -275,6 +275,38 @@ function getShiftedPeriodData(period, dayShift) {
     const d = daily[shiftedIdx];
     return [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.qqq5, d.sso, d.spxl];
   });
+}
+
+// Build a custom qData array for an envelope-ghost sim. Every ghost STARTS at
+// the canonical entry date with the same $10K allocation (anchoring the chart
+// visually), then rebalances every `period_days` trading days starting at
+// `entry + dayOffset`. Different ghosts pick different `dayOffset` values
+// across 1..period_days, so the envelope shows "what if the strategy
+// rebalanced on a different day OF THE PERIOD" — i.e. rebalance-day
+// sensitivity. dayOffset=period_days collapses to the canonical schedule.
+//
+// Why not the older getShiftedPeriodData approach (shift every row's date
+// AND price back by N days): for periods longer than ~1 quarter, those shifts
+// effectively move the strategy's entry date backwards, so the sim runs for
+// the shifted window BEFORE the chart's first label and the ghost line shows
+// up far above $10K at the chart's leftmost x. This date-anchored builder
+// keeps every ghost's first data point at the canonical entry with $10K.
+function buildEnvelopeQData(period, dayOffset, entryDate, exitDate) {
+  if (!daily || !dailyDateToIdx) return [];
+  const entryDailyIdx = dailyDateToIdx.get(entryDate);
+  if (entryDailyIdx == null) return [];
+  const periodDays = PERIOD_DAYS[period] || 63;
+  const entryD = daily[entryDailyIdx];
+  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.qqq5, d.sso, d.spxl];
+  const result = [rowFor(entryD)];
+  let dailyIdx = entryDailyIdx + Math.max(1, dayOffset);
+  while (dailyIdx < daily.length) {
+    const d = daily[dailyIdx];
+    if (exitDate && d.date > exitDate) break;
+    result.push(rowFor(d));
+    dailyIdx += periodDays;
+  }
+  return result;
 }
 
 // === Simple Moving Average precomputation ===

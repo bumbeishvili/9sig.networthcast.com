@@ -916,10 +916,20 @@ function computeConfigGhosts(cfg, ctx) {
     buyThrottlePct: +pget(p, 'select-9sig-buypower', 90) || 90,
   };
   const cashRate = (+pget(p, 'select-9sig-cashrate', 4) || 0) / 100;
-  const sampleQuarterly = (period === 'yearly'); // quarter-detail ghosts for a yearly config
-  return entry.cache.map(qData => {
-    const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, { ...sigParams, qData, skipBH: true, sampleQuarterly });
-    const rows = (r.samplePoints && r.samplePoints.length) ? r.samplePoints : (r.log || []);
+  // Build a per-ghost qData anchored at the chart's entry date. Each ghost
+  // rebalances at entry + dayOffset, then every `period_days` after. We pass
+  // the canonical entryIdx/exitIdx so simulate()'s yearly entry-remap finds
+  // qData[0] (which we set to the canonical entry date) and walks the full
+  // qData without slicing it down to a single row.
+  const entryDate = quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0];
+  const exitDate  = quarterlyData[exitIdx]    && quarterlyData[exitIdx][0];
+  return entry.shifts.map(dayShift => {
+    const qData = (typeof buildEnvelopeQData === 'function')
+      ? buildEnvelopeQData(period, dayShift, entryDate, exitDate)
+      : null;
+    if (!qData || qData.length < 2) return labels.map(() => null);
+    const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, { ...sigParams, qData, skipBH: true });
+    const rows = r.log || [];
     return resampleByDate(rows.map(l => ({ date: l.date, value: l.total })), labels);
   });
 }

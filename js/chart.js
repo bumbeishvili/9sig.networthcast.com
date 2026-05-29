@@ -993,23 +993,34 @@ function render() {
   }
   // Envelope ghosts are the MAIN line's alternate runs → simulated at mainPeriod,
   // then step-resampled onto the shared x-axis (labels, built below) so they
-  // align even when the grain is finer than the main's period.
+  // align even when the grain is finer than the main's period. Each ghost
+  // gets its own qData starting at the canonical entry date with $10K, then
+  // rebalances every period_days starting at entry + dayShift — so dayShift
+  // becomes "rebalance day OF THE PERIOD" sensitivity. Every ghost is anchored
+  // at the same chart-entry visually; only the rebalance schedule varies.
+  const _entryDate = quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0];
+  const _exitDate  = quarterlyData[exitIdx]    && quarterlyData[exitIdx][0];
   const _rawShiftSims = showBaseEnvelope
-    ? shiftedQuarterlyCache.map(qData => simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise, {
-        qData,
-        skipBH: true,
-        qGrowth,
-        underlyingCol: sigUlCol,
-        crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
-        crashLookbackMonths,
-        spikeTriggerPct: Number.isFinite(spikeTrigPct) ? spikeTrigPct : 100,
-        rebalancePeriod: mainPeriod,
-        sampleQuarterly: mainPeriod === 'yearly',
-        cashPct,
-        contribDeployPct,
-        targetFromPrevTarget,
-        buyThrottlePct,
-      }))
+    ? envelopeShiftDays.map(dayShift => {
+        const ghostQData = (typeof buildEnvelopeQData === 'function')
+          ? buildEnvelopeQData(mainPeriod, dayShift, _entryDate, _exitDate)
+          : null;
+        if (!ghostQData || ghostQData.length < 2) return { log: [] };
+        return simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise, {
+          qData: ghostQData,
+          skipBH: true,
+          qGrowth,
+          underlyingCol: sigUlCol,
+          crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
+          crashLookbackMonths,
+          spikeTriggerPct: Number.isFinite(spikeTrigPct) ? spikeTrigPct : 100,
+          rebalancePeriod: mainPeriod,
+          cashPct,
+          contribDeployPct,
+          targetFromPrevTarget,
+          buyThrottlePct,
+        });
+      })
     : [];
   const shiftResults = _rawShiftSims.map(s => onLabels(pick(s.samplePoints, s.log), l => l.total));
 
