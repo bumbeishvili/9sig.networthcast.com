@@ -57,6 +57,32 @@ function initialToSlider(v) {
   return Math.round(((logVal - minLog) / (maxLog - minLog)) * 1000);
 }
 
+// Logarithmic slider for monthly contribution: slider 0 maps to $0, and
+// slider 1-1000 maps to $50-$1M with contribution-friendly rounding.
+const MONTHLY_MIN = 50;
+const MONTHLY_MAX = 1000000;
+const MONTHLY_MIN_LOG = Math.log10(MONTHLY_MIN);
+const MONTHLY_MAX_LOG = Math.log10(MONTHLY_MAX);
+
+function sliderToMonthly(s) {
+  if (s <= 0) return 0;
+  const clamped = Math.max(1, Math.min(1000, s));
+  const norm = (clamped - 1) / 999;
+  const raw = Math.pow(10, MONTHLY_MIN_LOG + norm * (MONTHLY_MAX_LOG - MONTHLY_MIN_LOG));
+  if (raw < 1500) return Math.round(raw / 50) * 50;
+  if (raw < 10000) return Math.round(raw / 100) * 100;
+  if (raw < 100000) return Math.round(raw / 1000) * 1000;
+  if (raw < 1000000) return Math.round(raw / 10000) * 10000;
+  return MONTHLY_MAX;
+}
+
+function monthlyToSlider(v) {
+  if (v <= 0) return 0;
+  const clamped = Math.max(MONTHLY_MIN, Math.min(MONTHLY_MAX, v));
+  const norm = (Math.log10(clamped) - MONTHLY_MIN_LOG) / (MONTHLY_MAX_LOG - MONTHLY_MIN_LOG);
+  return Math.max(1, Math.min(1000, Math.round(1 + norm * 999)));
+}
+
 // Quadratic-curve mapping for the cash-interest-rate slider: slider position
 // 0–1000 maps to rate 0–100 %. The squared curve packs fine resolution into
 // the realistic 0–10 % range (where most users live) while the upper third
@@ -122,4 +148,3 @@ function makeLetterBadge(letter, color) {
 }
 const switchIcon9sig = makeLetterBadge('9', '#22d3ee');
 const switchIconTqqq = makeLetterBadge('T', '#f87171');
-

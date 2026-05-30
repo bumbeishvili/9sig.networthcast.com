@@ -6,7 +6,26 @@
  *   node tests/sim.cjs
  */
 const fs = require('fs');
+const utils = fs.readFileSync(__dirname + '/../js/utils.js', 'utf8');
 const sim = fs.readFileSync(__dirname + '/../js/simulate.js', 'utf8');
+global.window = { devicePixelRatio: 1 };
+global.document = {
+  createElement: () => ({
+    width: 0,
+    height: 0,
+    getContext: () => ({
+      scale() {},
+      beginPath() {},
+      arc() {},
+      fill() {},
+      fillText() {},
+      set fillStyle(v) {},
+      set font(v) {},
+      set textAlign(v) {},
+      set textBaseline(v) {},
+    }),
+  }),
+};
 global.fmt = (n) => String(Math.round(n));
 global.computeMaxDrawdown = function (s) {
   if (!s || s.length < 2) return 0;
@@ -14,6 +33,7 @@ global.computeMaxDrawdown = function (s) {
   for (const v of s) { if (!Number.isFinite(v)) continue; if (v > p) p = v; if (p > 0) { const d = (p - v) / p; if (d > m) m = d; } }
   return m;
 };
+(0, eval)(utils);
 
 const MONTHS = ['2020-01-31','2020-02-29','2020-03-31','2020-04-30','2020-05-31','2020-06-30','2020-07-31','2020-08-31','2020-09-30','2020-10-31','2020-11-30','2020-12-31','2021-01-31','2021-02-28','2021-03-31','2021-04-30','2021-05-31','2021-06-30','2021-07-31','2021-08-31','2021-09-30','2021-10-31','2021-11-30','2021-12-31'];
 const QENDS = new Set(['2020-03-31','2020-06-30','2020-09-30','2020-12-31','2021-03-31','2021-06-30','2021-09-30','2021-12-31']);
@@ -33,6 +53,26 @@ const A = []; let pass = true;
 const ck = (n, c, e) => { if (!c) { pass = false; A.push('  FAIL  ' + n + (e ? '   ' + e : '')); } else A.push('  ok    ' + n); };
 const approx = (a, b, tol) => Math.abs(a - b) <= (tol != null ? tol : 1e-6) * Math.max(1, Math.abs(b));
 const flat = new Array(24).fill(100), last = 7;
+
+// ----- slider mappings -----
+ck('Monthly slider maps position 0 to $0',
+   typeof sliderToMonthly === 'function' && sliderToMonthly(0) === 0);
+ck('Monthly slider maps first nonzero position to $50',
+   typeof sliderToMonthly === 'function' && sliderToMonthly(1) === 50);
+ck('Monthly slider caps at $1M',
+   typeof sliderToMonthly === 'function' && sliderToMonthly(1000) === 1000000);
+ck('Monthly slider round-trips a small contribution through dollar storage',
+   typeof sliderToMonthly === 'function' && typeof monthlyToSlider === 'function' && sliderToMonthly(monthlyToSlider(500)) === 500);
+ck('Monthly slider round-trips $1,250 through dollar storage',
+   typeof sliderToMonthly === 'function' && typeof monthlyToSlider === 'function' && sliderToMonthly(monthlyToSlider(1250)) === 1250);
+ck('Monthly slider round-trips $1,450 through dollar storage',
+   typeof sliderToMonthly === 'function' && typeof monthlyToSlider === 'function' && sliderToMonthly(monthlyToSlider(1450)) === 1450);
+ck('Monthly slider round-trips $1,500 through dollar storage',
+   typeof sliderToMonthly === 'function' && typeof monthlyToSlider === 'function' && sliderToMonthly(monthlyToSlider(1500)) === 1500);
+ck('Monthly slider round-trips $1,600 through dollar storage',
+   typeof sliderToMonthly === 'function' && typeof monthlyToSlider === 'function' && sliderToMonthly(monthlyToSlider(1600)) === 1600);
+ck('Monthly slider round-trips the maximum contribution through dollar storage',
+   typeof sliderToMonthly === 'function' && typeof monthlyToSlider === 'function' && sliderToMonthly(monthlyToSlider(1000000)) === 1000000);
 
 // ----- Buy & Hold -----
 install(flat);
